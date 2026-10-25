@@ -1,6 +1,36 @@
-# SF Civic Lens + Gemini Argon + FalkorDB
+# SF Civic Lens + Gemini 4 Argon 
 
-This project includes a static frontend at `sf_civic_lens_web_application.html` and a small Flask backend at `backend_server.py`.
+**SF Civic Lens** is a full-stack urban triage and 3D spatial remediation platform powered by **Gemini 4 Argon (`gemini-4-argon`)** and **FalkorDB**. It upgrades static 2D street-level hazard photos into interactive 3D engineering simulations, physics-verified accessibility bypasses, and graph-tracked municipal dispatch workflows[cite: 5, 6].
+
+This project includes a static frontend at `sf_civic_lens_web_application.html`, interactive 3D simulation modules, and a Flask backend at `backend_server.py`.
+
+---
+
+## Core Gemini 4 Argon Simulation Capabilities
+
+### 1. Curb Access & Standing Water Bypass Simulation (3D Physics & Telemetry)
+Using **Gemini 4 Argon's** 1M output window and multimodal video reasoning, the system generates and verifies a playable 3D street-intersection simulation for curb-access hazards[cite: 5, 6]:
+
+* **Spatial Hazard & Remediation Modeling:**
+  * **Observed Standing Water (No-Go Zone):** Maps flooded curb-ramp zones with an assumed standing water depth of `4–8 cm` alongside the tactile warning panel and pedestrian crosswalk signal pole[cite: 6].
+  * **Proposed Temporary Dry Bypass:** Generates a highlighted green dry sidewalk bypass path engineered to a safe `~2.0° (3.5%)` grade around street obstacles (such as municipal trash bins and flooded gutters)[cite: 6].
+  * **Synthetic Verification Goal:** Places an automated verification target zone on the upper sidewalk at `x > 4.0m, y > 0.25m`[cite: 6].
+* **Live Curb Access Telemetry HUD:**
+  * Continuously tracks and renders real-time agent physics metrics in the top-left overlay so both human analysts and the **Gemini 4 Argon Video Critic** can verify safe traversal frame-by-frame[cite: 5, 6]:
+    * **Coordinates:** Real-time `Pos X`, `Pos Y`, and `Pos Z` tracking (confirming traversal from `Pos X: 1.43 m` to `6.43 m` and `Pos Y: 0.36 m`)[cite: 6].
+    * **Incline & Stability:** Live `Slope / Tilt` (`1.51°` to `2.00°`) and peak `Max Tilt` (`2.00°`), ensuring the wheelchair agent never tips[cite: 6].
+    * **Safety & Target Status:** Tracks `Collisions: 0`, `Elapsed` time (`s`), and dynamically flips the status badge from `BYPASS ACTIVE` (`Goal: FALSE`) to `GOAL REACHED` (`Goal: TRUE`) once the wheelchair agent crosses `x > 4.0m, y > 0.25m`[cite: 6].
+* **Multi-Angle Interactive Camera Controls:**
+  * **Photo Reference View:** Perspective aligned with the original street-level inspection photo, showing the standing water, tactile domes, and bypass route[cite: 6].
+  * **Tracking View:** Third-person follow camera behind the wheelchair agent as it ascends the dry sidewalk grade[cite: 6].
+  * **Overhead Plan View:** Top-down orthographic blueprint displaying spatial callouts for the Standing Water No-Go Zone, Proposed Temporary Bypass, and Synthetic Goal[cite: 6].
+
+### 2. 3D Volumetric Road Crack & Pothole Analysis
+For severe pavement failures and potholes, Gemini 4 Argon transforms raw street photos into a 3D topographic wireframe and thermal stress overlay[cite: 3]:
+* **Automated Volumetric & Depth Telemetry:** Estimates structural parameters directly on the 3D mesh, including **Depth** (`14.2 cm`), **Volume** (`0.18 m³`), **Surface Area** (`1.2 m²`), and **Damage Severity** (`HIGH`).
+* **Fracture Propagation Mapping:** Highlights radiating asphalt stress fractures and user reference scale markers to prioritize municipal crew dispatch.
+
+---
 
 ## Start the backend
 
