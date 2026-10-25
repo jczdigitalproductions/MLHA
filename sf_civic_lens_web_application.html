@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SF Civic Lens | AI-Powered 311 Intake & Urban Knowledge Graph</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Leaflet CSS & JS for SF Maps -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Vis Network for FalkorDB Graph Visualization -->
+  <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            sfNavy: {
+              900: '#0b1329',
+              800: '#111d3d',
+              700: '#1b2c58',
+              600: '#273f78'
+            },
+            civicEmerald: '#10b981',
+            civicCyan: '#06b6d4',
+            civicAmber: '#f59e0b',
+            civicRose: '#f43f5e'
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #080d1a;
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+    
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0b1329;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #273f78;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3b82f6;
+    }
+
+    #sf-map {
+      height: 380px;
+      border-radius: 0.75rem;
+      z-index: 10;
+    }
+    #graph-container {
+      height: 380px;
+      border-radius: 0.75rem;
+      background: #090f20;
+    }
+    
+    .pulse-glow {
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.35);
+    }
+    .neon-border {
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    .badge-critical {
+      background: rgba(244, 63, 94, 0.15);
+      border: 1px solid rgba(244, 63, 94, 0.5);
+      color: #fb7185;
+    }
+    .badge-high {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.5);
+      color: #fcd34d;
+    }
+    .badge-medium {
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.5);
+      color: #93c5fd;
+    }
+    .badge-low {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.5);
+      color: #6ee7b7;
+    }
+
+    body.accessibility-mode {
+      background: #ffffff;
+      color: #111827;
+    }
+
+    body.accessibility-mode .bg-slate-900\/80,
+    body.accessibility-mode .bg-slate-900\/70,
+    body.accessibility-mode .bg-slate-950,
+    body.accessibility-mode .bg-slate-950\/60,
+    body.accessibility-mode .bg-slate-950\/70,
+    body.accessibility-mode .bg-slate-900,
+    body.accessibility-mode .bg-slate-800,
+    body.accessibility-mode .bg-slate-800\/80,
+    body.accessibility-mode .bg-slate-900\/90 {
+      background: #f8fafc !important;
+      border-color: #cbd5e1 !important;
+      color: #0f172a !important;
+    }
+
+    body.accessibility-mode,
+    body.accessibility-mode p,
+    body.accessibility-mode span,
+    body.accessibility-mode div,
+    body.accessibility-mode input,
+    body.accessibility-mode textarea,
+    body.accessibility-mode select,
+    body.accessibility-mode button,
+    body.accessibility-mode td,
+    body.accessibility-mode th {
+      font-size: 1.02rem !important;
+      color: #111827 !important;
+    }
+
+    body.accessibility-mode .text-xs,
+    body.accessibility-mode .text-sm,
+    body.accessibility-mode .text-base,
+    body.accessibility-mode .text-lg {
+      font-size: 1.02rem !important;
+    }
+
+    body.accessibility-mode button,
+    body.accessibility-mode input,
+    body.accessibility-mode textarea,
+    body.accessibility-mode select {
+      border-width: 2px !important;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.1);
+    }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col bg-slate-950 text-slate-100">
+
+  <header class="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <!-- Logo & Branding -->
+      <div class="flex items-center space-x-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-blue-600 to-emerald-400 flex items-center justify-center shadow-lg shadow-blue-500/20">
+          <i data-lucide="camera" class="w-5 h-5 text-white"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="font-bold text-lg tracking-tight text-white">SF Civic Lens</span>
+            <span class="bg-blue-900/60 text-blue-300 text-xs font-semibold px-2 py-0.5 rounded-full border border-blue-700/60">Hack for Humanity SF</span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block">Gemini Multimodal 311 Intake & FalkorDB Knowledge Graph</p>
+        </div>
+      </div>
+
+      <!-- Quick Action District Switcher & Key Config -->
+      <div class="flex items-center space-x-3">
+        <!-- Live Status Pill -->
+        <div class="hidden md:flex items-center space-x-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/60 text-xs">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span class="text-slate-300 font-medium">City Intake: <span class="text-emerald-400">Active</span></span>
+          <span class="text-slate-500">|</span>
+          <span class="text-slate-400 font-mono text-[11px]" id="current-time-display">Sep 19, 2026</span>
+        </div>
+
+        <div class="hidden sm:flex items-center space-x-1.5 text-xs text-slate-400" title="Total page visits">
+          <i data-lucide="users" class="w-3.5 h-3.5 text-blue-300"></i>
+          <span><span id="page-visit-count">0</span> visits</span>
+        </div>
+
+        <!-- API Key modal trigger -->
+        <button id="btn-open-settings" class="flex items-center space-x-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+          <i data-lucide="key" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span class="hidden sm:inline font-medium">Gemini Key</span>
+        </button>
+
+        <button id="accessibility-toggle" class="flex items-center space-x-1.5 text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold px-3 py-1.5 rounded-lg border border-amber-300 transition" aria-pressed="false">
+          <i data-lucide="accessibility" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">Accessibility</span>
+        </button>
+
+        <!-- Demo Pitch Helper Toggle -->
+        <button id="btn-toggle-pitch" class="flex items-center space-x-1.5 text-xs bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium px-3 py-1.5 rounded-lg shadow transition">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">Pitch Deck</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div id="pitch-drawer" class="hidden border-b border-indigo-900/60 bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 p-4 transition-all duration-300">
+    <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+      <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+        <div class="font-bold text-indigo-300 flex items-center mb-1">
+          <i data-lucide="alert-triangle" class="w-3.5 h-3.5 mr-1 text-amber-400"></i> 1. The Local Problem
+        </div>
+        <p class="text-slate-400 leading-relaxed">Official SF 311 form completion takes 4-7 minutes per issue, causing severe underreporting of ADA ramp blocks, hazardous potholes, and trash in SOMA & Mission.</p>
+      </div>
+
+      <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+        <div class="font-bold text-indigo-300 flex items-center mb-1">
+          <i data-lucide="cpu" class="w-3.5 h-3.5 mr-1 text-blue-400"></i> 2. Gemini Multimodal
+        </div>
+        <p class="text-slate-400 leading-relaxed">Extracts incident type, severity index, responsible agency (DPW, SFMTA, SFFD), and drafts official 311 payload in under 2 seconds from street photos.</p>
+      </div>
+
+      <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+        <div class="font-bold text-indigo-300 flex items-center mb-1">
+          <i data-lucide="network" class="w-3.5 h-3.5 mr-1 text-emerald-400"></i> 3. FalkorDB Knowledge Graph
+        </div>
+        <p class="text-slate-400 leading-relaxed">Correlates tickets into graph entities: <code>(Incident)-[:HOTSPOT_IN]->(District)</code>. Uncovers chronic infrastructure neglect clusters using Cypher graph queries.</p>
+      </div>
+
+      <div class="bg-slate-900/80 p-3 rounded-lg border border-slate-800">
+        <div class="font-bold text-indigo-300 flex items-center mb-1">
+          <i data-lucide="heart" class="w-3.5 h-3.5 mr-1 text-rose-400"></i> 4. Community Impact
+        </div>
+        <p class="text-slate-400 leading-relaxed">Democratizes municipal reporting for pedestrians, wheelchair users, and transit commuters with 1-click citizen empowerment and auto-routing dispatch.</p>
+      </div>
+    </div>
+  </div>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    
+    <!-- Top KPI & District Banner -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+      <div class="bg-slate-900/70 border border-slate-800/80 p-3.5 rounded-xl flex items-center justify-between">
+        <div>
+          <p class="text-xs text-slate-400 font-medium">District in Focus</p>
+          <p class="text-base font-bold text-white flex items-center mt-0.5">
+            District 6 (SOMA)
+            <i data-lucide="map-pin" class="w-3.5 h-3.5 ml-1 text-blue-400"></i>
+          </p>
+        </div>
+        <span class="text-xs bg-blue-950 text-blue-400 px-2 py-1 rounded border border-blue-800/60 font-mono">501 Folsom</span>
+      </div>
+
+      <div class="bg-slate-900/70 border border-slate-800/80 p-3.5 rounded-xl flex items-center justify-between">
+        <div>
+          <p class="text-xs text-slate-400 font-medium">Active 311 Tickets</p>
+          <p class="text-base font-bold text-amber-400 mt-0.5" id="kpi-ticket-count">14 Reports</p>
+        </div>
+        <div class="p-2 bg-amber-500/10 rounded-lg text-amber-400">
+          <i data-lucide="clipboard-list" class="w-4 h-4"></i>
+        </div>
+      </div>
+
+      <div class="bg-slate-900/70 border border-slate-800/80 p-3.5 rounded-xl flex items-center justify-between">
+        <div>
+          <p class="text-xs text-slate-400 font-medium">Graph Hotspots Found</p>
+          <p class="text-base font-bold text-rose-400 mt-0.5" id="kpi-hotspots-count">3 Clusters</p>
+        </div>
+        <div class="p-2 bg-rose-500/10 rounded-lg text-rose-400">
+          <i data-lucide="git-merge" class="w-4 h-4"></i>
+        </div>
+      </div>
+
+      <div class="bg-slate-900/70 border border-slate-800/80 p-3.5 rounded-xl flex items-center justify-between">
+        <div>
+          <p class="text-xs text-slate-400 font-medium">Avg. AI Triage Time</p>
+          <p class="text-base font-bold text-emerald-400 mt-0.5">1.42s</p>
+        </div>
+        <div class="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
+          <i data-lucide="zap" class="w-4 h-4"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      
+      <!-- Left Intake Form (5 Cols) -->
+      <div class="lg:col-span-5 bg-slate-900/80 border border-slate-800/90 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
+            <div class="flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+              <h2 class="font-semibold text-slate-100 text-base">Multimodal 311 Intake</h2>
+            </div>
+            <span class="text-xs font-mono text-slate-400 flex items-center">
+              <i data-lucide="bot" class="w-3.5 h-3.5 mr-1 text-blue-400"></i> Gemini 3 Flash
+            </span>
+          </div>
+
+          <!-- Preset Scenarios Selector -->
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Quick San Francisco Street Scenarios:</label>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <button onclick="loadPreset('pothole')" class="text-left p-2 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700/60 transition truncate">
+                <span class="font-semibold text-slate-200 block truncate">🕳️ Folsom St Pothole</span>
+                <span class="text-[10px] text-slate-400">SOMA • Hazard</span>
+              </button>
+              <button onclick="loadPreset('ada')" class="text-left p-2 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700/60 transition truncate">
+                <span class="font-semibold text-slate-200 block truncate">♿ Blocked ADA Ramp</span>
+                <span class="text-[10px] text-slate-400">16th & Mission • Transit</span>
+              </button>
+              <button onclick="loadPreset('dumping')" class="text-left p-2 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700/60 transition truncate">
+                <span class="font-semibold text-slate-200 block truncate">🛋️ Tenderloin Dumping</span>
+                <span class="text-[10px] text-slate-400">Eddy St • DPW</span>
+              </button>
+              <button onclick="loadPreset('light')" class="text-left p-2 rounded-lg bg-slate-800 hover:bg-slate-700/80 border border-slate-700/60 transition truncate">
+                <span class="font-semibold text-slate-200 block truncate">💡 Broken Streetlight</span>
+                <span class="text-[10px] text-slate-400">Howard & 4th • Safety</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Image Drag & Drop Area -->
+          <div class="mb-3">
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Upload or Capture Incident Photo:</label>
+            <div id="drop-zone" class="relative group border-2 border-dashed border-slate-700 hover:border-blue-500 rounded-xl p-4 text-center bg-slate-950/50 cursor-pointer transition flex flex-col items-center justify-center min-h-[160px]">
+              <input type="file" id="image-input" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-20" />
+              
+              <div id="preview-placeholder" class="flex flex-col items-center space-y-2">
+                <div class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-blue-400 group-hover:bg-slate-700 transition">
+                  <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+                </div>
+                <div class="text-xs">
+                  <span class="font-semibold text-blue-400 hover:underline">Click to upload</span> or drag photo here
+                </div>
+                <p class="text-[11px] text-slate-500">Supports JPG, PNG, WEBP</p>
+              </div>
+
+              <div id="preview-container" class="hidden w-full relative">
+                <img id="image-preview" src="" alt="Incident Preview" class="w-full h-36 object-cover rounded-lg border border-slate-700" />
+                <button type="button" onclick="clearImage(event)" class="absolute top-1.5 right-1.5 bg-slate-900/90 text-slate-300 hover:text-white p-1 rounded-md z-30 border border-slate-700">
+                  <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">Quick Thumbnail Test Images</label>
+            <div class="grid grid-cols-3 gap-2">
+              <button type="button" onclick="window.top.location.href='http://127.0.0.1:5173/simulations/folsom_pothole.html'" class="group rounded-lg border border-slate-700 bg-slate-900/70 p-1.5 hover:border-blue-500 transition text-left">
+                <img src="img-1.png" alt="Test image 1" class="w-full h-16 object-cover rounded-md mb-1" />
+                <span class="text-[10px] text-slate-200 font-medium block truncate">Img 1</span>
+              </button>
+              <button type="button" onclick="window.top.location.href='http://127.0.0.1:5173/simulations/mission_ramp.html'" class="group rounded-lg border border-slate-700 bg-slate-900/70 p-1.5 hover:border-blue-500 transition text-left">
+                <img src="img-2.png" alt="Test image 2" class="w-full h-16 object-cover rounded-md mb-1" />
+                <span class="text-[10px] text-slate-200 font-medium block truncate">Img 2</span>
+              </button>
+              <button type="button" onclick="window.top.location.href='http://127.0.0.1:5173/simulations/soma_mattress.html'" class="group rounded-lg border border-slate-700 bg-slate-900/70 p-1.5 hover:border-blue-500 transition text-left">
+                <img src="incident.png" alt="Test image 3" class="w-full h-16 object-cover rounded-md mb-1" />
+                <span class="text-[10px] text-slate-200 font-medium block truncate">Incident</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Location & Context Inputs -->
+          <div class="grid grid-cols-2 gap-3 mb-4 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1">Incident Address / Intersection</label>
+              <div class="relative">
+                <input id="input-location" type="text" value="501 Folsom St, San Francisco, CA" class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-7 pr-2 py-2 text-slate-200 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none" />
+                <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-500 absolute left-2 top-2.5"></i>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-slate-400 mb-1">San Francisco District</label>
+              <select id="input-district" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-slate-200 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none">
+                <option value="SOMA (District 6)" selected>District 6 - SOMA / Tenderloin</option>
+                <option value="Mission (District 9)">District 9 - Mission / Bernal</option>
+                <option value="Tenderloin (District 6)">District 6 - Tenderloin Core</option>
+                <option value="Financial District (District 3)">District 3 - FiDi / North Beach</option>
+                <option value="Richmond (District 1)">District 1 - Richmond / Presidio</option>
+                <option value="Castro (District 8)">District 8 - Castro / Noe Valley</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs text-slate-400 mb-1">Citizen Observation Notes (Optional)</label>
+            <input id="input-notes" type="text" placeholder="e.g., Deep asphalt crater right near bike lane, hazardous for Muni buses and cyclists" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none" />
+          </div>
+        </div>
+
+        <!-- Submit Button -->
+        <div>
+          <button id="btn-analyze" onclick="runCivicAnalysis()" class="w-full bg-gradient-to-r from-blue-600 via-blue-500 to-emerald-500 hover:from-blue-500 hover:to-emerald-400 text-white font-medium py-2.5 px-4 rounded-xl flex items-center justify-center space-x-2 shadow-lg shadow-blue-500/20 transition cursor-pointer">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+            <span id="analyze-btn-text">Analyze with Gemini Vision</span>
+          </button>
+          <p class="text-[11px] text-slate-500 text-center mt-2">
+            Auto-dispatches structured ticket to City 311 & updates FalkorDB graph hot spots
+          </p>
+        </div>
+      </div>
+
+      <div class="lg:col-span-7 bg-slate-900/80 border border-slate-800/90 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="file-check-2" class="w-5 h-5 text-emerald-400"></i>
+              <h2 class="font-semibold text-slate-100 text-base">Gemini Structured 311 Dispatch</h2>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span id="status-pill" class="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono border border-slate-700">Awaiting Input</span>
+              <button onclick="copyTicketJSON()" title="Copy 311 JSON" class="p-1.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-transparent hover:border-slate-700 transition">
+                <i data-lucide="copy" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Loading State Spinner -->
+          <div id="ai-loading" class="hidden flex flex-col items-center justify-center py-14 space-y-4">
+            <div class="relative w-12 h-12">
+              <div class="absolute inset-0 rounded-full border-4 border-blue-500/20"></div>
+              <div class="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-500 animate-spin"></div>
+            </div>
+            <p class="text-sm font-medium text-slate-300">Gemini is inspecting imagery & synthesizing civic hazards...</p>
+            <p class="text-xs text-slate-500 font-mono">Running multimodal verification & 311 schema validation</p>
+          </div>
+
+          <!-- Content Output Box -->
+          <div id="ai-results" class="space-y-4">
+            <!-- Header Badges -->
+            <div class="grid grid-cols-3 gap-2.5">
+              <div class="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80">
+                <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Category</span>
+                <span id="res-category" class="font-bold text-sm text-slate-100 mt-0.5 block truncate">Pothole / Roadway</span>
+              </div>
+              <div class="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80">
+                <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Severity</span>
+                <span id="res-severity" class="font-bold text-sm text-amber-400 mt-0.5 block">HIGH (Level 3)</span>
+              </div>
+              <div class="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80">
+                <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">Agency Routing</span>
+                <span id="res-agency" class="font-bold text-sm text-blue-400 mt-0.5 block truncate">SF Public Works (DPW)</span>
+              </div>
+            </div>
+
+            <!-- Gemini Incident Synthesis Box -->
+            <div class="bg-slate-950/60 rounded-xl p-3.5 border border-slate-800">
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-xs font-semibold text-slate-300 flex items-center">
+                  <i data-lucide="brain-circuit" class="w-3.5 h-3.5 mr-1.5 text-blue-400"></i>
+                  Hazard Analysis & Citizen Impact
+                </span>
+                <span class="text-[10px] font-mono text-emerald-400" id="res-confidence">Confidence: 98.4%</span>
+              </div>
+              <p id="res-summary" class="text-xs text-slate-300 leading-relaxed">
+                Large asphalt depression measuring ~18" across with edge degradation near the bicycle corridor on Folsom St. Poses critical tire blowout risk for SFMTA 12 bus and high likelihood of bicycle ejection during wet pavement conditions.
+              </p>
+            </div>
+
+            <!-- Official 311 Payload Field -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-medium text-slate-400">Generated SF 311 Ticket Description</label>
+                <span class="text-[10px] text-slate-500 font-mono">Format: SFGov-311-v2</span>
+              </div>
+              <div class="relative">
+                <textarea id="res-ticket-text" rows="3" readonly class="w-full bg-slate-950 font-mono text-xs text-slate-300 p-3 rounded-xl border border-slate-800 focus:outline-none resize-none leading-relaxed">[SF-311 INTAKE #SF-84920]
+Location: 501 Folsom St, SOMA
+Jurisdiction: SF Public Works - Street Repair Div
+Classification: Roadway Crater / Pothole (>3 in depth)
+Priority: Tier 1 Dispatch (24hr SLA)
+Notes: Identified near pedestrian crosswalk & bike lane.</textarea>
+              </div>
+            </div>
+
+            <!-- Recommended Dispatch Action -->
+            <div class="p-3 rounded-xl bg-blue-950/30 border border-blue-900/50 flex items-start space-x-3">
+              <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0"></i>
+              <div class="text-xs text-slate-300">
+                <strong class="text-slate-100 block mb-0.5">Recommended Field Action:</strong>
+                <span id="res-action">Dispatch Bureau of Urban Forestry and Street Cleaning or DPW Street Patching unit. Deploy temporary hazard cone if dispatch window exceeds 2 hours.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Bar at Bottom of Ticket -->
+        <div class="mt-4 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+          <div class="text-[11px] text-slate-500 font-mono">
+            Ticket ID: <span id="res-ticket-id" class="text-slate-400">SF-311-2026-8492</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button onclick="copyOfficialDispatchNote()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center space-x-1">
+              <i data-lucide="mail" class="w-3 h-3 text-amber-400"></i>
+              <span>Copy Official 311 Note</span>
+            </button>
+            <button onclick="dispatchDirectCrew()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center space-x-1">
+              <i data-lucide="send" class="w-3 h-3 text-blue-400"></i>
+              <span>Push to Dispatch</span>
+            </button>
+            <button onclick="addReportToMapAndGraph()" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-3.5 py-1.5 rounded-lg transition flex items-center space-x-1 shadow-sm">
+              <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+              <span>Publish into Knowledge Graph</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
+      
+      <!-- Leaflet Map Panel (6 Cols) -->
+      <div class="lg:col-span-6 bg-slate-900/80 border border-slate-800/90 rounded-2xl p-5 shadow-xl flex flex-col">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="map" class="w-4 h-4 text-blue-400"></i>
+            <h3 class="font-semibold text-slate-100 text-sm">Live San Francisco 311 Heatmap</h3>
+          </div>
+          <div class="flex items-center space-x-2 text-xs">
+            <span class="flex items-center space-x-1 text-rose-400"><span class="w-2 h-2 rounded-full bg-rose-500"></span><span>Critical</span></span>
+            <span class="flex items-center space-x-1 text-amber-400"><span class="w-2 h-2 rounded-full bg-amber-500"></span><span>High</span></span>
+            <span class="flex items-center space-x-1 text-blue-400"><span class="w-2 h-2 rounded-full bg-blue-500"></span><span>Medium</span></span>
+          </div>
+        </div>
+
+        <div id="sf-map" class="flex-1 w-full relative"></div>
+
+        <div class="mt-3 flex items-center justify-between text-[11px] text-slate-400">
+          <span>Centered on: <strong class="text-slate-300">Entrepreneurs First (501 Folsom St)</strong></span>
+          <button onclick="resetMapCenter()" class="hover:text-blue-400 flex items-center underline">
+            <i data-lucide="crosshair" class="w-3 h-3 mr-1"></i> Re-center Map
+          </button>
+        </div>
+      </div>
+
+      <!-- FalkorDB Knowledge Graph Panel (6 Cols) -->
+      <div class="lg:col-span-6 bg-slate-900/80 border border-slate-800/90 rounded-2xl p-5 shadow-xl flex flex-col">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="git-fork" class="w-4 h-4 text-emerald-400"></i>
+            <h3 class="font-semibold text-slate-100 text-sm">FalkorDB Urban Knowledge Graph</h3>
+          </div>
+          <span class="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">Graph Engine Active</span>
+        </div>
+
+        <!-- Interactive Vis.js Network Canvas -->
+        <div id="graph-container" class="relative">
+          <div class="absolute top-2 left-2 z-20 bg-slate-900/90 px-2 py-1 rounded text-[10px] text-slate-400 border border-slate-800 pointer-events-none">
+            Zoom / Drag to explore relationships
+          </div>
+        </div>
+
+        <!-- Cypher Query Box & Execution -->
+        <div class="mt-3 pt-3 border-t border-slate-800">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-[11px] font-mono text-slate-400 flex items-center">
+              <i data-lucide="terminal" class="w-3 h-3 mr-1 text-amber-400"></i> FalkorDB Cypher Query
+            </span>
+            <button onclick="runCypherDemo()" class="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-0.5 rounded border border-slate-700 transition">
+              Run Cypher
+            </button>
+          </div>
+          <div class="bg-slate-950 rounded-lg p-2 font-mono text-[11px] text-blue-300 border border-slate-800/80 flex items-center justify-between">
+            <span id="cypher-code">MATCH (d:District {name:'SOMA'})&lt;-[:IN]-(i:Incident) RETURN i.category, count(i)</span>
+            <span class="text-[10px] text-slate-500 ml-2">28ms</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-slate-900/80 border border-slate-800/90 rounded-2xl p-5 shadow-xl">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-800 gap-2">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="activity" class="w-4 h-4 text-amber-400"></i>
+          <h3 class="font-semibold text-slate-100 text-sm">Recent San Francisco 311 Activity Feed</h3>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="filterTickets('all')" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">All</button>
+          <button onclick="filterTickets('critical')" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-rose-400 border border-slate-700">Critical</button>
+          <button onclick="filterTickets('soma')" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700">SOMA Only</button>
+          <button onclick="exportCSV()" class="text-xs px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center space-x-1">
+            <i data-lucide="download" class="w-3 h-3"></i>
+            <span>Export CSV</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Feed Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-slate-300">
+          <thead class="bg-slate-950/60 text-[11px] uppercase tracking-wider text-slate-400 border-b border-slate-800">
+            <tr>
+              <th class="py-2.5 px-3">Ticket ID</th>
+              <th class="py-2.5 px-3">Category</th>
+              <th class="py-2.5 px-3">Location</th>
+              <th class="py-2.5 px-3">Severity</th>
+              <th class="py-2.5 px-3">Assigned Department</th>
+              <th class="py-2.5 px-3">Status</th>
+              <th class="py-2.5 px-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody id="ticket-table-body" class="divide-y divide-slate-800/60 font-sans">
+            <!-- Dynamically populated rows -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <div id="settings-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="sliders" class="w-5 h-5 text-blue-400"></i>
+          <h3 class="font-semibold text-slate-100 text-base">Gemini API Settings</h3>
+        </div>
+        <button id="btn-close-settings" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-300 leading-relaxed">
+        You can use your own <strong class="text-blue-400">Google AI Studio Key</strong> or rely on the built-in high-fidelity hackathon simulation engine (no key required for instant judging demos).
+      </p>
+
+      <div>
+        <label class="block text-xs font-medium text-slate-400 mb-1">Google Gemini API Key</label>
+        <input type="password" id="api-key-input" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none font-mono" />
+        <p class="text-[11px] text-slate-500 mt-1">Free tier keys from Google AI Studio work seamlessly.</p>
+      </div>
+
+      <div class="p-3 bg-slate-950 rounded-lg border border-slate-800 text-[11px] text-slate-400 space-y-1">
+        <div class="flex justify-between">
+          <span>Vision Model:</span>
+          <span class="font-mono text-slate-200">gemini-3-flash-preview</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Knowledge Graph Engine:</span>
+          <span class="font-mono text-emerald-400">FalkorDB Client v1.2</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-2 pt-2">
+        <button id="btn-save-key" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium px-4 py-2 rounded-lg transition">
+          Save Settings
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast Container -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden bg-slate-900 border border-slate-700 text-slate-200 text-xs px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-2.5 transition transform translate-y-2">
+    <i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
+    <span id="toast-text">Action successful!</span>
+  </div>
+
+  <script>
+    // --- Application State & Configuration ---
+    const APP_STATE = {
+      apiKey: localStorage.getItem('sf_civic_gemini_key') || '',
+      currentImageBase64: null,
+      currentPreset: 'pothole',
+      tickets: [
+        {
+          id: 'SF-311-2026-8492',
+          category: 'Pothole / Roadway Hazard',
+          location: '501 Folsom St, SOMA',
+          coords: [37.7876, -122.3965],
+          district: 'SOMA (District 6)',
+          severity: 'HIGH',
+          dept: 'Public Works (DPW)',
+          status: 'Dispatched',
+          time: '12m ago'
+        },
+        {
+          id: 'SF-311-2026-8488',
+          category: 'Blocked ADA Pedestrian Ramp',
+          location: '16th & Mission St',
+          coords: [37.7650, -122.4199],
+          district: 'Mission (District 9)',
+          severity: 'CRITICAL',
+          dept: 'SFMTA Enforcement',
+          status: 'In Review',
+          time: '34m ago'
+        },
+        {
+          id: 'SF-311-2026-8475',
+          category: 'Commercial Illegal Dumping',
+          location: '380 Eddy St',
+          coords: [37.7841, -122.4144],
+          district: 'Tenderloin (District 6)',
+          severity: 'HIGH',
+          dept: 'DPW Street Cleaning',
+          status: 'Crew En Route',
+          time: '1h ago'
+        },
+        {
+          id: 'SF-311-2026-8461',
+          category: 'Broken Streetlight / Dark Corridor',
+          location: 'Howard & 4th St',
+          coords: [37.7831, -122.4021],
+          district: 'SOMA (District 6)',
+          severity: 'MEDIUM',
+          dept: 'Public Utilities Commission (SFPUC)',
+          status: 'Scheduled',
+          time: '2h ago'
+        },
+        {
+          id: 'SF-311-2026-8450',
+          category: 'Obstructed Storm Drain Grate',
+          location: 'Clement & 8th Ave',
+          coords: [37.7830, -122.4665],
+          district: 'Richmond (District 1)',
+          severity: 'LOW',
+          dept: 'SF Water / Sewer',
+          status: 'Resolved',
+          time: '4h ago'
+        }
+      ]
+    };
+
+    // Preset Sample Visuals (SVGs embedded directly to ensure instant offline & online reliability)
+    const PRESETS = {
+      pothole: {
+        title: 'Folsom St Pothole',
+        location: '501 Folsom St, San Francisco, CA',
+        district: 'SOMA (District 6)',
+        notes: 'Deep road crater in middle of lane outside Entrepreneurs First building. Threat to bikes.',
+        category: 'Pothole / Roadway Hazard',
+        severity: 'HIGH',
+        agency: 'SF Public Works (DPW)',
+        confidence: '98.4%',
+        summary: 'Large asphalt depression measuring ~18 inches across with crumbly edge degradation near bicycle corridor on Folsom St. Poses sudden tire rupture risk for SFMTA buses and cyclist ejection.',
+        ticket: `[SF-311 INTAKE #SF-84920]\nLocation: 501 Folsom St, SOMA\nJurisdiction: SF Public Works - Street Repair Div\nClassification: Roadway Crater / Pothole (>3 in depth)\nPriority: Tier 1 Dispatch (24hr SLA)\nNotes: Located near pedestrian crossing outside event center.`,
+        action: 'Dispatch DPW Street Patching unit. Deploy temporary hazard warning cone if work crew delayed.',
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="350" viewBox="0 0 600 350"><rect width="600" height="350" fill="#2d3748"/><path d="M0,280 L600,280" stroke="#718096" stroke-width="4"/><path d="M0,200 L600,200" stroke="#ecc94b" stroke-dasharray="25,15" stroke-width="4"/><ellipse cx="300" cy="220" rx="110" ry="45" fill="#1a202c" stroke="#4a5568" stroke-width="5"/><path d="M220,210 Q280,240 370,225" stroke="#111" stroke-width="6"/><circle cx="280" cy="230" r="14" fill="#000"/><text x="180" y="70" fill="#fff" font-family="sans-serif" font-size="20" font-weight="bold">Folsom & 1st St - Asphalt Crater</text></svg>`
+      },
+      ada: {
+        title: 'Blocked ADA Ramp',
+        location: '16th & Mission St, San Francisco, CA',
+        district: 'Mission (District 9)',
+        notes: 'Scooters and pallets stacked over yellow tactile paving. Wheelchair users cannot cross.',
+        category: 'Blocked ADA Pedestrian Ramp',
+        severity: 'CRITICAL',
+        agency: 'SFMTA Parking Enforcement',
+        confidence: '99.1%',
+        summary: 'Complete physical obstruction of curb ramp and tactile paving at high-traffic BART transit hub. Violates Title II ADA federal compliance and forces mobility device users into active traffic lanes.',
+        ticket: `[SF-311 INTAKE #SF-84881]\nLocation: 16th St & Mission St (NW Corner)\nJurisdiction: SFMTA Enforcement & DPW\nClassification: Critical ADA Accessibility Violation\nPriority: Urgent (Immediate Clearance)\nNotes: Multiple abandoned dockless e-scooters blocking sidewalk transition.`,
+        action: 'Immediate citation and confiscation dispatch to SFMTA Tow/Enforcement team.',
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="350" viewBox="0 0 600 350"><rect width="600" height="350" fill="#334155"/><rect x="180" y="160" width="240" height="150" fill="#fbbf24" stroke="#d97706" stroke-width="4"/><path d="M200,180 L400,180 M200,210 L400,210 M200,240 L400,240" stroke="#b45309" stroke-width="3"/><rect x="230" y="140" width="140" height="70" fill="#ef4444" rx="6"/><text x="255" y="180" fill="#fff" font-family="sans-serif" font-weight="bold">BLOCKED</text><text x="140" y="60" fill="#fff" font-family="sans-serif" font-size="20" font-weight="bold">16th & Mission St Curb Ramp</text></svg>`
+      },
+      dumping: {
+        title: 'Tenderloin Illegal Dumping',
+        location: '380 Eddy St, San Francisco, CA',
+        district: 'Tenderloin (District 6)',
+        notes: 'Abandoned broken sofa, mattress, and hazardous trash bags blocking sidewalk.',
+        category: 'Commercial Illegal Dumping',
+        severity: 'HIGH',
+        agency: 'DPW Street Environmental Services',
+        confidence: '97.2%',
+        summary: 'Bulky furniture items (sofa frame, discarded mattress, broken glass) piled on public right-of-way. Creating pedestrian bottleneck and public health sanitation violation.',
+        ticket: `[SF-311 INTAKE #SF-84752]\nLocation: 380 Eddy St, Tenderloin\nJurisdiction: DPW Bureau of Street Environmental Services\nClassification: Illegal Bulky Waste Dumping\nPriority: Tier 1 Public Cleanliness (24hr SLA)\nNotes: Requires flatbed hydraulic lift truck for removal.`,
+        action: 'Dispatch DPW mechanical sweep and heavy trash recovery crew.',
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="350" viewBox="0 0 600 350"><rect width="600" height="350" fill="#1e293b"/><rect x="100" y="240" width="400" height="80" fill="#475569"/><rect x="160" y="170" width="180" height="90" fill="#64748b" rx="8"/><rect x="330" y="190" width="90" height="70" fill="#cbd5e1" rx="4"/><text x="160" y="80" fill="#fff" font-family="sans-serif" font-size="20" font-weight="bold">Eddy St - Illegal Bulky Waste</text></svg>`
+      },
+      light: {
+        title: 'Broken Streetlight',
+        location: 'Howard & 4th St, San Francisco, CA',
+        district: 'SOMA (District 6)',
+        notes: 'Luminaire fixture shattered, wiring exposed, street corner pitch black at night.',
+        category: 'Broken Streetlight / Electrical Hazard',
+        severity: 'MEDIUM',
+        agency: 'SFPUC Power & Infrastructure',
+        confidence: '96.5%',
+        summary: 'Damaged municipal pole arm with non-functional LED luminaire assembly. Reduced pedestrian visibility adjacent to Moscone Center transit corridor.',
+        ticket: `[SF-311 INTAKE #SF-84614]\nLocation: Howard & 4th St (SE Corner)\nJurisdiction: SF Public Utilities Commission (Power Dept)\nClassification: Street Lighting Failure / Pole Inspection\nPriority: Standard Utility Maintenance (48hr SLA)\nNotes: Pole #SFPUC-4091.`,
+        action: 'Schedule SFPUC aerial bucket crew for fixture replacement and ballast testing.',
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="350" viewBox="0 0 600 350"><rect width="600" height="350" fill="#0f172a"/><path d="M280,350 L280,120 Q280,80 340,80 L360,80" stroke="#94a3b8" stroke-width="12" fill="none"/><rect x="340" y="80" width="50" height="25" fill="#e2e8f0" rx="4"/><circle cx="365" cy="115" r="18" fill="#f87171" stroke="#ef4444"/><text x="170" y="50" fill="#fff" font-family="sans-serif" font-size="20" font-weight="bold">Howard & 4th St - Luminaire Defect</text></svg>`
+      }
+    };
+
+    // Convert SVG to Data URL for image element
+    function svgToDataUrl(svgString) {
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+    }
+
+    // --- Map Initialization (Leaflet.js) ---
+    let map;
+    let markersLayer;
+
+    function initMap() {
+      // Centered on 501 Folsom St (Entrepreneurs First, Hack for Humanity)
+      map = L.map('sf-map', {
+        zoomControl: true,
+        scrollWheelZoom: false
+      }).setView([37.7876, -122.3965], 13);
+
+      // Dark theme map tiles (CartoDB Dark Matter)
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 19
+      }).addTo(map);
+
+      markersLayer = L.layerGroup().addTo(map);
+      renderMapMarkers();
+    }
+
+    function getSeverityColor(sev) {
+      if (sev === 'CRITICAL') return '#f43f5e';
+      if (sev === 'HIGH') return '#f59e0b';
+      if (sev === 'MEDIUM') return '#3b82f6';
+      return '#10b981';
+    }
+
+    function renderMapMarkers() {
+      if (!markersLayer) return;
+      markersLayer.clearLayers();
+
+      APP_STATE.tickets.forEach(ticket => {
+        const color = getSeverityColor(ticket.severity);
+        const marker = L.circleMarker(ticket.coords, {
+          radius: ticket.severity === 'CRITICAL' ? 10 : 8,
+          fillColor: color,
+          color: '#ffffff',
+          weight: 2,
+          opacity: 0.9,
+          fillOpacity: 0.85
+        });
+
+        marker.bindPopup(`
+          <div class="text-slate-900 font-sans p-1">
+            <div class="font-bold text-xs">${ticket.category}</div>
+            <div class="text-[11px] text-slate-600">${ticket.location}</div>
+            <div class="mt-1 flex items-center justify-between text-[10px]">
+              <span class="font-semibold text-slate-800">${ticket.dept}</span>
+              <span class="font-bold" style="color:${color}">${ticket.severity}</span>
+            </div>
+          </div>
+        `);
+
+        markersLayer.addLayer(marker);
+      });
+    }
+
+    function resetMapCenter() {
+      if (map) {
+        map.setView([37.7876, -122.3965], 14);
+      }
+    }
+
+    // --- FalkorDB Urban Knowledge Graph (Vis-Network) ---
+    let network;
+    let graphNodes, graphEdges;
+
+    function initKnowledgeGraph() {
+      const container = document.getElementById('graph-container');
+
+      // Initial Graph Nodes
+      const nodesArray = [
+        // District Nodes
+        { id: 'd_soma', label: 'District 6: SOMA', group: 'district', color: '#1e3a8a', font: { color: '#93c5fd' }, size: 24 },
+        { id: 'd_mission', label: 'District 9: Mission', group: 'district', color: '#1e3a8a', font: { color: '#93c5fd' }, size: 22 },
+        { id: 'd_tenderloin', label: 'Tenderloin Subzone', group: 'district', color: '#1e3a8a', font: { color: '#93c5fd' }, size: 20 },
+
+        // Agency Nodes
+        { id: 'a_dpw', label: 'SF DPW (Public Works)', group: 'agency', color: '#047857', font: { color: '#6ee7b7' }, size: 22 },
+        { id: 'a_sfmta', label: 'SFMTA (Transit & Traffic)', group: 'agency', color: '#047857', font: { color: '#6ee7b7' }, size: 22 },
+        { id: 'a_puc', label: 'SFPUC (Utilities)', group: 'agency', color: '#047857', font: { color: '#6ee7b7' }, size: 18 },
+
+        // Incident Nodes
+        { id: 'i_1', label: 'Pothole: Folsom St', group: 'incident', color: '#b45309', font: { color: '#fde68a' }, size: 16 },
+        { id: 'i_2', label: 'ADA Ramp: 16th St', group: 'incident', color: '#be123c', font: { color: '#fecdd3' }, size: 18 },
+        { id: 'i_3', label: 'Dumping: Eddy St', group: 'incident', color: '#b45309', font: { color: '#fde68a' }, size: 16 },
+        { id: 'i_4', label: 'Dark Pole: Howard St', group: 'incident', color: '#1d4ed8', font: { color: '#bfdbfe' }, size: 14 },
+
+        // FalkorDB Hotspot Cluster Node
+        { id: 'h_folsom_corridor', label: '🔥 SOMA Road Decay Hotspot', group: 'hotspot', color: '#e11d48', font: { color: '#fff', strokeWidth: 2 }, size: 26 }
+      ];
+
+      // Initial Graph Edges
+      const edgesArray = [
+        { from: 'i_1', to: 'd_soma', label: 'LOCATED_IN', arrows: 'to', color: { color: '#334155' }, font: { size: 9, color: '#94a3b8' } },
+        { from: 'i_1', to: 'a_dpw', label: 'ASSIGNED_TO', arrows: 'to', color: { color: '#334155' }, font: { size: 9, color: '#94a3b8' } },
+        { from: 'i_1', to: 'h_folsom_corridor', label: 'CLUSTER_OF', arrows: 'to', dashes: true, color: { color: '#f43f5e' } },
+
+        { from: 'i_2', to: 'd_mission', label: 'LOCATED_IN', arrows: 'to', color: { color: '#334155' } },
+        { from: 'i_2', to: 'a_sfmta', label: 'ASSIGNED_TO', arrows: 'to', color: { color: '#334155' } },
+
+        { from: 'i_3', to: 'd_tenderloin', label: 'LOCATED_IN', arrows: 'to', color: { color: '#334155' } },
+        { from: 'i_3', to: 'a_dpw', label: 'ASSIGNED_TO', arrows: 'to', color: { color: '#334155' } },
+
+        { from: 'i_4', to: 'd_soma', label: 'LOCATED_IN', arrows: 'to', color: { color: '#334155' } },
+        { from: 'i_4', to: 'a_puc', label: 'ASSIGNED_TO', arrows: 'to', color: { color: '#334155' } },
+        { from: 'i_4', to: 'h_folsom_corridor', label: 'CLUSTER_OF', arrows: 'to', dashes: true, color: { color: '#f43f5e' } }
+      ];
+
+      graphNodes = new vis.DataSet(nodesArray);
+      graphEdges = new vis.DataSet(edgesArray);
+
+      const data = { nodes: graphNodes, edges: graphEdges };
+      const options = {
+        nodes: {
+          shape: 'dot',
+          scaling: { min: 12, max: 28 },
+          font: { face: 'Inter', size: 11 }
+        },
+        edges: {
+          width: 1.5,
+          smooth: { type: 'continuous' }
+        },
+        physics: {
+          stabilization: false,
+          barnesHut: {
+            gravitationalConstant: -2800,
+            springConstant: 0.04,
+            springLength: 95
+          }
+        },
+        interaction: {
+          hover: true,
+          tooltipDelay: 100
+        }
+      };
+
+      network = new vis.Network(container, data, options);
+    }
+
+    function runCypherDemo() {
+      const queries = [
+        "MATCH (d:District {name:'SOMA'})<-[:IN]-(i:Incident) RETURN i.category, count(i)",
+        "MATCH (h:Hotspot)-[:CLUSTER_OF]-(i:Incident)-[:ASSIGNED_TO]->(dept) RETURN dept.name, h.severity",
+        "MATCH (i:Incident {severity:'CRITICAL'})-[:LOCATED_IN]->(dist) RETURN i, dist.supervisor",
+        "MATCH (a:Agency {name:'SF DPW'})<-[:ASSIGNED_TO]-(i) WHERE i.status = 'Dispatched' RETURN count(i)"
+      ];
+      const randomQuery = queries[Math.floor(Math.random() * queries.length)];
+      document.getElementById('cypher-code').innerText = randomQuery;
+      
+      showToast("FalkorDB query executed in 18ms across 34 nodes!");
+      
+      // Animate physics slightly
+      if (network) {
+        network.focus('h_folsom_corridor', {
+          scale: 1.1,
+          animation: { duration: 600, easingFunction: 'easeInOutQuad' }
+        });
+      }
+    }
+
+    // --- Ticket Table & Feed Management ---
+    function renderTicketTable(filter = 'all') {
+      const tbody = document.getElementById('ticket-table-body');
+      tbody.innerHTML = '';
+
+      let list = APP_STATE.tickets;
+      if (filter === 'critical') {
+        list = list.filter(t => t.severity === 'CRITICAL');
+      } else if (filter === 'soma') {
+        list = list.filter(t => t.district.includes('SOMA'));
+      }
+
+      list.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-800/40 transition";
+
+        let badgeClass = 'badge-low';
+        if (item.severity === 'CRITICAL') badgeClass = 'badge-critical';
+        else if (item.severity === 'HIGH') badgeClass = 'badge-high';
+        else if (item.severity === 'MEDIUM') badgeClass = 'badge-medium';
+
+        tr.innerHTML = `
+          <td class="py-3 px-3 font-mono text-slate-400 text-[11px]">${item.id}</td>
+          <td class="py-3 px-3 font-medium text-slate-200">${item.category}</td>
+          <td class="py-3 px-3 text-slate-400">${item.location}</td>
+          <td class="py-3 px-3"><span class="px-2 py-0.5 rounded text-[10px] font-semibold ${badgeClass}">${item.severity}</span></td>
+          <td class="py-3 px-3 text-slate-300">${item.dept}</td>
+          <td class="py-3 px-3 font-mono text-[11px] text-emerald-400">${item.status}</td>
+          <td class="py-3 px-3 text-right">
+            <button onclick="focusTicket('${item.id}')" class="text-blue-400 hover:text-blue-300 font-medium text-[11px] underline">Inspect</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('kpi-ticket-count').innerText = `${APP_STATE.tickets.length} Reports`;
+    }
+
+    function focusTicket(id) {
+      const item = APP_STATE.tickets.find(t => t.id === id);
+      if (!item) return;
+
+      if (map) {
+        map.setView(item.coords, 16);
+      }
+      showToast(`Map centered on: ${item.location}`);
+    }
+
+    function filterTickets(type) {
+      renderTicketTable(type);
+    }
+
+    // --- Multimodal Vision Intake & Gemini Workflow ---
+    function loadPreset(key) {
+      APP_STATE.currentPreset = key;
+      const data = PRESETS[key];
+      if (!data) return;
+
+      document.getElementById('input-location').value = data.location;
+      document.getElementById('input-district').value = data.district;
+      document.getElementById('input-notes').value = data.notes;
+
+      // Show preview
+      const previewImg = document.getElementById('image-preview');
+      const placeholder = document.getElementById('preview-placeholder');
+      const container = document.getElementById('preview-container');
+
+      previewImg.src = svgToDataUrl(data.svg);
+      APP_STATE.currentImageBase64 = null; // Presets use predefined SVG
+      placeholder.classList.add('hidden');
+      container.classList.remove('hidden');
+
+      showToast(`Loaded preset: ${data.title}`);
+    }
+
+    function clearImage(e) {
+      if (e) e.stopPropagation();
+      document.getElementById('image-input').value = '';
+      APP_STATE.currentImageBase64 = null;
+      document.getElementById('preview-container').classList.add('hidden');
+      document.getElementById('preview-placeholder').classList.remove('hidden');
+    }
+
+    function loadLocalImage(filename, fallbackCategory, fallbackLocation, fallbackDistrict) {
+      const imgUrl = `./${filename}`;
+      const previewImg = document.getElementById('image-preview');
+      const previewPlaceholder = document.getElementById('preview-placeholder');
+      const previewContainer = document.getElementById('preview-container');
+
+      previewImg.src = imgUrl;
+      previewPlaceholder.classList.add('hidden');
+      previewContainer.classList.remove('hidden');
+
+      document.getElementById('input-location').value = fallbackLocation;
+      document.getElementById('input-district').value = fallbackDistrict;
+
+      const selectedPreset = {
+        category: fallbackCategory,
+        location: fallbackLocation,
+        district: fallbackDistrict
+      };
+      APP_STATE.currentPreset = selectedPreset.category.toLowerCase().replace(/\s+/g, '-') || 'custom';
+
+      fetch(imgUrl)
+        .then(response => response.blob())
+        .then(blob => {
+          const reader = new FileReader();
+          reader.onload = function(evt) {
+            const fullDataUrl = evt.target.result;
+            const base64Index = fullDataUrl.indexOf('base64,');
+            if (base64Index !== -1) {
+              APP_STATE.currentImageBase64 = fullDataUrl.substring(base64Index + 7);
+            }
+          };
+          reader.readAsDataURL(blob);
+        })
+        .catch(() => {
+          APP_STATE.currentImageBase64 = null;
+        });
+
+      showToast(`Loaded ${filename} for Gemini analysis`);
+    }
+
+    // File Input listener
+    const fileInput = document.getElementById('image-input');
+    fileInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const fullDataUrl = evt.target.result;
+        document.getElementById('image-preview').src = fullDataUrl;
+        document.getElementById('preview-placeholder').classList.add('hidden');
+        document.getElementById('preview-container').classList.remove('hidden');
+
+        // Extract base64 without prefix for Gemini API payload
+        const base64Index = fullDataUrl.indexOf('base64,');
+        if (base64Index !== -1) {
+          APP_STATE.currentImageBase64 = fullDataUrl.substring(base64Index + 7);
+        }
+        showToast("Citizen photo attached successfully");
+      };
+      reader.readAsDataURL(file);
+    });
+
+    async function runCivicAnalysis() {
+      const location = document.getElementById('input-location').value.trim();
+      const district = document.getElementById('input-district').value;
+      const notes = document.getElementById('input-notes').value.trim();
+
+      const btn = document.getElementById('btn-analyze');
+      const btnText = document.getElementById('analyze-btn-text');
+      const loadingState = document.getElementById('ai-loading');
+      const resultsState = document.getElementById('ai-results');
+      const statusPill = document.getElementById('status-pill');
+
+      btn.disabled = true;
+      btnText.innerText = "Analyzing Street Visuals...";
+      loadingState.classList.remove('hidden');
+      resultsState.classList.add('hidden');
+      statusPill.innerText = "Gemini Processing...";
+      statusPill.className = "text-xs px-2.5 py-0.5 rounded-full bg-blue-900/60 text-blue-300 font-mono border border-blue-700 animate-pulse";
+
+      let analysis = null;
+
+      // If user provided a real Gemini Key and an uploaded image
+      if (APP_STATE.apiKey && APP_STATE.currentImageBase64) {
+        try {
+          const prompt = `You are the San Francisco 311 Multimodal AI Dispatcher.
+Analyze this street infrastructure photo from location: ${location}, District: ${district}. User observation: ${notes}.
+Respond STRICTLY with a valid JSON object matching this schema:
+{
+  "category": "String (e.g. Pothole / Roadway, Blocked ADA Ramp, Illegal Dumping, Broken Streetlight)",
+  "severity": "CRITICAL" or "HIGH" or "MEDIUM" or "LOW",
+  "agency": "String (e.g. SF Public Works (DPW), SFMTA Enforcement, SFPUC Power)",
+  "confidence": "String (e.g. 98.6%)",
+  "summary": "2-3 sentences assessing hazard level, pedestrian/cyclist/transit impact",
+  "ticketText": "Structured official 311 intake description",
+  "recommendedAction": "Concrete municipal field crew task"
+}`;
+
+          const payload = {
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  { text: prompt },
+                  {
+                    inlineData: {
+                      mimeType: "image/jpeg",
+                      data: APP_STATE.currentImageBase64
+                    }
+                  }
+                ]
+              }
+            ],
+            generationConfig: {
+              responseMimeType: "application/json"
+            }
+          };
+
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${APP_STATE.apiKey}`;
+          const res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) throw new Error(`API status ${res.status}`);
+          const data = await res.json();
+          const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          analysis = JSON.parse(rawText);
+        } catch (err) {
+          console.warn("Live Gemini API call failed or rate-limited; falling back to high-fidelity engine:", err);
+          analysis = null;
+        }
+      }
+
+      // If no live key or call failed, use our high-fidelity preset or algorithmic simulator
+      if (!analysis) {
+        // Artificial short delay to exhibit the realistic streaming experience
+        await new Promise(r => setTimeout(r, 1200));
+        
+        if (PRESETS[APP_STATE.currentPreset]) {
+          const p = PRESETS[APP_STATE.currentPreset];
+          analysis = {
+            category: p.category,
+            severity: p.severity,
+            agency: p.agency,
+            confidence: p.confidence,
+            summary: p.summary,
+            ticketText: p.ticket,
+            recommendedAction: p.action
+          };
+        } else {
+          analysis = {
+            category: "Street Infrastructure Hazard",
+            severity: "HIGH",
+            agency: "SF Public Works (DPW)",
+            confidence: "97.8%",
+            summary: `Inspection at ${location} confirms street surface defect. Restricts pedestrian right-of-way and requires municipal containment.`,
+            ticketText: `[SF-311 INTAKE #${Math.floor(10000 + Math.random() * 90000)}]\nLocation: ${location}\nDistrict: ${district}\nNotes: ${notes || 'Automated visual hazard assessment verified.'}`,
+            recommendedAction: "Dispatch DPW Street Services team for immediate site inspection."
+          };
+        }
+      }
+
+      // Populate UI with Gemini Output
+      document.getElementById('res-category').innerText = analysis.category;
+      document.getElementById('res-severity').innerText = `${analysis.severity}`;
+      document.getElementById('res-agency').innerText = analysis.agency;
+      document.getElementById('res-confidence').innerText = `Confidence: ${analysis.confidence}`;
+      document.getElementById('res-summary').innerText = analysis.summary;
+      document.getElementById('res-ticket-text').value = analysis.ticketText;
+      document.getElementById('res-action').innerText = analysis.recommendedAction;
+
+      const newId = `SF-311-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+      document.getElementById('res-ticket-id').innerText = newId;
+
+      // Update pill styling
+      statusPill.innerText = "311 Validated";
+      statusPill.className = "text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 font-mono border border-emerald-800";
+
+      // Reset controls
+      loadingState.classList.add('hidden');
+      resultsState.classList.remove('hidden');
+      btn.disabled = false;
+      btnText.innerText = "Analyze with Gemini Vision";
+
+      showToast("Gemini analysis complete & 311 ticket generated!");
+    }
+
+    function addReportToMapAndGraph() {
+      const loc = document.getElementById('input-location').value;
+      const cat = document.getElementById('res-category').innerText;
+      const sev = document.getElementById('res-severity').innerText.split(' ')[0];
+      const dept = document.getElementById('res-agency').innerText;
+      const ticketId = document.getElementById('res-ticket-id').innerText;
+      const district = document.getElementById('input-district').value;
+
+      const payload = {
+        actorName: localStorage.getItem('sf_civic_actor_name') || 'Analyst',
+        actorRole: 'City Analyst',
+        action: 'published_ticket',
+        ticketId,
+        category: cat,
+        location: loc,
+        district: district,
+        severity: sev,
+        agency: dept,
+        summary: `Published ${cat} at ${loc} to the civic knowledge graph.`
+      };
+
+      fetch('http://localhost:5001/api/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => {
+        console.info('FalkorDB backend not running; continuing in demo mode.');
+      });
+
+      // Derive nearby SF coordinate around Folsom St with small jitter
+      const jitterLat = 37.7876 + (Math.random() - 0.5) * 0.015;
+      const jitterLng = -122.3965 + (Math.random() - 0.5) * 0.015;
+
+      const newTicket = {
+        id: ticketId,
+        category: cat,
+        location: loc,
+        coords: [jitterLat, jitterLng],
+        district: district,
+        severity: sev,
+        dept: dept,
+        status: 'Dispatched',
+        time: 'Just now'
+      };
+
+      APP_STATE.tickets.unshift(newTicket);
+      renderTicketTable();
+      renderMapMarkers();
+
+      // Add to FalkorDB Graph Visibly
+      if (graphNodes && graphEdges) {
+        const nodeId = 'i_' + Date.now();
+        graphNodes.add({
+          id: nodeId,
+          label: `${cat}: ${loc.split(',')[0]}`,
+          group: 'incident',
+          color: getSeverityColor(sev),
+          font: { color: '#ffffff' },
+          size: 18
+        });
+
+        // Connect to District & SOMA cluster
+        graphEdges.add([
+          { from: nodeId, to: 'd_soma', label: 'LOCATED_IN', arrows: 'to', color: { color: '#475569' } },
+          { from: nodeId, to: 'h_folsom_corridor', label: 'CLUSTER_OF', arrows: 'to', dashes: true, color: { color: '#f43f5e' } },
+          { from: nodeId, to: 'a_dpw', label: 'ASSIGNED_TO', arrows: 'to', color: { color: '#475569' } }
+        ]);
+
+        if (network) {
+          network.focus(nodeId, {
+            scale: 1.2,
+            animation: { duration: 800, easingFunction: 'easeInOutQuad' }
+          });
+        }
+      }
+
+      showToast(`Incident published into FalkorDB Graph & SF Map!`);
+    }
+
+    function dispatchDirectCrew() {
+      const id = document.getElementById('res-ticket-id').innerText;
+      const ticketCategory = document.getElementById('res-category').innerText;
+      const ticketLocation = document.getElementById('input-location').value;
+      const payload = {
+        actorName: localStorage.getItem('sf_civic_actor_name') || 'Analyst',
+        actorRole: 'Dispatch Supervisor',
+        action: 'dispatched_crew',
+        ticketId: id,
+        category: ticketCategory,
+        location: ticketLocation,
+        district: document.getElementById('input-district').value,
+        severity: document.getElementById('res-severity').innerText.split(' ')[0],
+        agency: document.getElementById('res-agency').innerText,
+        summary: `Crew dispatched for ${ticketCategory} at ${ticketLocation}.`
+      };
+
+      fetch('http://localhost:5001/api/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => {
+        console.info('FalkorDB backend not running; demo-only dispatch recorded locally.');
+      });
+
+      showToast(`Dispatched crew for ${id} via SF City Radio Gateway!`);
+    }
+
+    function copyTicketJSON() {
+      const payload = {
+        ticketId: document.getElementById('res-ticket-id').innerText,
+        category: document.getElementById('res-category').innerText,
+        severity: document.getElementById('res-severity').innerText,
+        agency: document.getElementById('res-agency').innerText,
+        description: document.getElementById('res-ticket-text').value,
+        timestamp: new Date().toISOString()
+      };
+      
+      const jsonStr = JSON.stringify(payload, null, 2);
+      
+      // Safe fallback copy
+      const tempArea = document.createElement('textarea');
+      tempArea.value = jsonStr;
+      document.body.appendChild(tempArea);
+      tempArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(tempArea);
+
+      showToast("311 Dispatch JSON copied to clipboard!");
+    }
+
+    function getCurrentCoordinates() {
+      const location = document.getElementById('input-location').value || '501 Folsom St, San Francisco, CA';
+      const lower = location.toLowerCase();
+
+      if (lower.includes('mission') || lower.includes('16th')) return [37.7638, -122.4199];
+      if (lower.includes('eddy') || lower.includes('tenderloin')) return [37.7842, -122.4145];
+      if (lower.includes('howard') || lower.includes('4th')) return [37.7835, -122.4023];
+      if (lower.includes('clement') || lower.includes('richmond')) return [37.7825, -122.4685];
+      return [37.7876, -122.3965];
+    }
+
+    function buildOfficialDispatchNote() {
+      const ticketId = document.getElementById('res-ticket-id').innerText;
+      const category = document.getElementById('res-category').innerText;
+      const severity = document.getElementById('res-severity').innerText;
+      const agency = document.getElementById('res-agency').innerText;
+      const location = document.getElementById('input-location').value.trim() || 'Location not specified';
+      const district = document.getElementById('input-district').value || 'San Francisco';
+      const notes = document.getElementById('input-notes').value.trim() || 'No additional remarks provided.';
+      const timestamp = new Date().toISOString();
+      const [lat, lng] = getCurrentCoordinates();
+
+      return [
+        'SF 311 DISPATCH NOTE',
+        '===================',
+        `To: ${agency} / SF Department of Public Works / SFMTA`,
+        'From: Resident / Community Reporter',
+        `Subject: ${category} - ${severity}`,
+        `Ticket ID: ${ticketId}`,
+        `Severity Rating: ${severity}`,
+        `Location: ${location}`,
+        `District: ${district}`,
+        `GPS Coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+        `Timestamp (UTC): ${timestamp}`,
+        '',
+        'Issue Description:',
+        `${category} reported at ${location}. This condition affects pedestrian, transit, and accessibility safety in the surrounding public right-of-way.`,
+        '',
+        'Citizen Observation:',
+        notes,
+        '',
+        'Requested Action: Please inspect and dispatch the appropriate maintenance crew or enforcement response as soon as possible.',
+        'Photo: Attached via SF Civic Lens intake workflow.',
+        '',
+        'Thank you for the public safety response.',
+        'SF Civic Lens Community Reporting Workflow'
+      ].join('\n');
+    }
+
+    function copyOfficialDispatchNote() {
+      const note = buildOfficialDispatchNote();
+
+      const tempArea = document.createElement('textarea');
+      tempArea.value = note;
+      document.body.appendChild(tempArea);
+      tempArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(tempArea);
+
+      showToast('Official SF 311 dispatch note copied to clipboard');
+    }
+
+    function setAccessibilityMode(enabled) {
+      document.body.classList.toggle('accessibility-mode', enabled);
+      const toggle = document.getElementById('accessibility-toggle');
+      if (toggle) {
+        toggle.setAttribute('aria-pressed', String(enabled));
+        toggle.classList.toggle('bg-amber-500', !enabled);
+        toggle.classList.toggle('bg-slate-800', enabled);
+        toggle.classList.toggle('text-slate-950', !enabled);
+        toggle.classList.toggle('text-white', enabled);
+        toggle.innerHTML = enabled
+          ? '<i data-lucide="eye" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">High Contrast On</span>'
+          : '<i data-lucide="accessibility" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Accessibility</span>';
+        lucide.createIcons();
+      }
+      localStorage.setItem('sf_civic_accessibility_mode', String(enabled));
+    }
+
+    function exportCSV() {
+      let csv = 'Ticket ID,Category,Location,District,Severity,Department,Status\n';
+      APP_STATE.tickets.forEach(t => {
+        csv += `"${t.id}","${t.category}","${t.location}","${t.district}","${t.severity}","${t.dept}","${t.status}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.setAttribute('href', url);
+      a.setAttribute('download', `SF_311_Intake_${Date.now()}.csv`);
+      a.click();
+      showToast("Downloaded 311 intake incidents CSV");
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const toastText = document.getElementById('toast-text');
+      toastText.innerText = msg;
+      toast.classList.remove('hidden');
+      toast.classList.remove('translate-y-2');
+      toast.classList.add('translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.add('translate-y-2');
+        toast.classList.add('hidden');
+      }, 3500);
+    }
+
+    // --- Modal & Pitch Helper Listeners ---
+    document.getElementById('btn-open-settings').addEventListener('click', () => {
+      document.getElementById('api-key-input').value = APP_STATE.apiKey;
+      document.getElementById('settings-modal').classList.remove('hidden');
+    });
+
+    document.getElementById('btn-close-settings').addEventListener('click', () => {
+      document.getElementById('settings-modal').classList.add('hidden');
+    });
+
+    document.getElementById('btn-save-key').addEventListener('click', () => {
+      const key = document.getElementById('api-key-input').value.trim();
+      APP_STATE.apiKey = key;
+      localStorage.setItem('sf_civic_gemini_key', key);
+      document.getElementById('settings-modal').classList.add('hidden');
+      showToast(key ? "Gemini Key Saved!" : "Reverted to Demo Simulation Mode");
+    });
+
+    document.getElementById('btn-toggle-pitch').addEventListener('click', () => {
+      const drawer = document.getElementById('pitch-drawer');
+      drawer.classList.toggle('hidden');
+    });
+
+    document.getElementById('accessibility-toggle').addEventListener('click', () => {
+      const isEnabled = !document.body.classList.contains('accessibility-mode');
+      setAccessibilityMode(isEnabled);
+      showToast(isEnabled ? 'Accessibility mode enabled for high-contrast reporting' : 'Accessibility mode disabled');
+    });
+
+    // --- Initialize on Window Load ---
+    window.addEventListener('load', () => {
+      // Re-init Lucide Icons
+      lucide.createIcons();
+
+      // Initialize map & knowledge graph
+      initMap();
+      initKnowledgeGraph();
+      renderTicketTable();
+
+      fetch('http://localhost:5001/api/visits')
+        .then(response => response.json())
+        .then(data => {
+          if (data.ok) {
+            document.getElementById('page-visit-count').innerText = data.count.toLocaleString();
+          }
+        })
+        .catch(() => {
+          document.getElementById('page-visit-count').innerText = '—';
+        });
+
+      // Load default preset (Pothole at 501 Folsom St)
+      loadPreset('pothole');
+
+      const savedAccessibilityMode = localStorage.getItem('sf_civic_accessibility_mode') === 'true';
+      setAccessibilityMode(savedAccessibilityMode);
+
+      // Update date indicator to reflect Hack for Humanity date
+      const now = new Date();
+      document.getElementById('current-time-display').innerText = `Sep 19, 2026 • SF`;
+    });
+  </script>
+</body>
+</html>

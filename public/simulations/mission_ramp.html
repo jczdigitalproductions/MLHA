@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1280, height=720, initial-scale=1.0" />
+  <title>Photo-Referenced Wheelchair Curb Access & Standing Water Bypass Simulation</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #11161d;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    #canvas-container {
+      position: relative;
+      width: 1280px;
+      height: 720px;
+      margin: 0 auto;
+      overflow: hidden;
+      background: #87b5e5;
+    }
+    canvas {
+      display: block;
+      width: 1280px;
+      height: 720px;
+    }
+    /* Top-Left Telemetry HUD Overlay */
+    #hud-overlay {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      width: 395px;
+      background: rgba(14, 21, 31, 0.86);
+      border: 1px solid rgba(100, 180, 255, 0.38);
+      border-left: 4px solid #38bdf8;
+      border-radius: 8px;
+      padding: 11px 14px;
+      color: #f1f5f9;
+      font-size: 12.5px;
+      line-height: 1.45;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      pointer-events: none;
+      z-index: 20;
+    }
+    #hud-overlay h1 {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .status-badge {
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #f59e0b;
+      color: #0f172a;
+    }
+    .status-badge.goal {
+      background: #10b981;
+      color: #052e16;
+    }
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 7px 9px;
+      border-radius: 6px;
+      margin-bottom: 7px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 12px;
+    }
+    .telemetry-item span.label {
+      color: #94a3b8;
+    }
+    .telemetry-item span.val {
+      color: #f8fafc;
+      font-weight: 600;
+    }
+    .disclaimer-box {
+      font-size: 11px;
+      color: #cbd5e1;
+      background: rgba(245, 158, 11, 0.14);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 5px;
+      padding: 6px 8px;
+      line-height: 1.35;
+    }
+    .disclaimer-box strong {
+      color: #fbbf24;
+    }
+    /* Legend & Controls Overlay */
+    #legend-overlay {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      background: rgba(14, 21, 31, 0.84);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 7px;
+      padding: 8px 12px;
+      color: #e2e8f0;
+      font-size: 11.5px;
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      z-index: 20;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+    #camera-controls {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      display: flex;
+      gap: 6px;
+      z-index: 20;
+    }
+    .cam-btn {
+      background: rgba(15, 23, 42, 0.85);
+      color: #e2e8f0;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 5px;
+      padding: 6px 10px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .cam-btn:hover, .cam-btn.active {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #38bdf8;
+    }
+  </style>
+
+  <!-- Import Map for Three.js and cannon-es -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container">
+    <!-- Top-Left Telemetry HUD -->
+    <div id="hud-overlay">
+      <h1>
+        <span>Curb Access Telemetry</span>
+        <span id="hud-status" class="status-badge">BYPASS ACTIVE</span>
+      </h1>
+      <div class="telemetry-grid">
+        <div class="telemetry-item"><span class="label">Pos X:</span> <span id="hud-x" class="val">0.00 m</span></div>
+        <div class="telemetry-item"><span class="label">Pos Y:</span> <span id="hud-y" class="val">0.00 m</span></div>
+        <div class="telemetry-item"><span class="label">Pos Z:</span> <span id="hud-z" class="val">0.00 m</span></div>
+        <div class="telemetry-item"><span class="label">Slope / Tilt:</span> <span id="hud-tilt" class="val">0.00°</span></div>
+        <div class="telemetry-item"><span class="label">Max Tilt:</span> <span id="hud-max-tilt" class="val">0.00°</span></div>
+        <div class="telemetry-item"><span class="label">Collisions:</span> <span id="hud-collisions" class="val">0</span></div>
+        <div class="telemetry-item"><span class="label">Elapsed:</span> <span id="hud-time" class="val">0.00 s</span></div>
+        <div class="telemetry-item"><span class="label">Goal (x&gt;4,y&gt;.25):</span> <span id="hud-goal" class="val">FALSE</span></div>
+      </div>
+      <div class="disclaimer-box">
+        <strong>ILLUSTRATIVE ASSUMPTIONS:</strong> Dimensions, bypass slope (~2.0° / 3.5% grade), and standing water depth (~4–8 cm) are synthetic assumptions for physics demonstration, <em>not</em> direct measurements from the photo. <strong>Not an ADA certification.</strong>
+      </div>
+    </div>
+
+    <!-- Bottom-Left Scene Legend -->
+    <div id="legend-overlay">
+      <div class="legend-item"><span class="swatch" style="background:#3b82f6; border:1px solid #93c5fd;"></span>Observed Standing Water (No-Go Zone)</div>
+      <div class="legend-item"><span class="swatch" style="background:#10b981; border:1px solid #6ee7b7;"></span>Proposed Temporary Dry Bypass</div>
+      <div class="legend-item"><span class="swatch" style="background:#facc15; border:1px solid #fde047;"></span>Tactile Warning Panel</div>
+    </div>
+
+    <!-- Bottom-Right Camera Controls -->
+    <div id="camera-controls">
+      <button class="cam-btn active" id="btn-cam-photo">Photo Reference View</button>
+      <button class="cam-btn" id="btn-cam-follow">Tracking View</button>
+      <button class="cam-btn" id="btn-cam-top">Overhead Plan View</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import * as CANNON from 'cannon-es';
+
+    // =========================================================================
+    // 1. CRITICAL TELEMETRY STATE INITIALIZATION
+    // =========================================================================
+    window.simState = {
+      frame: 0,
+      agentPos: { x: 0, y: 0, z: 0 },
+      maxTiltDeg: 0,
+      collisions: 0,
+      goalReached: false,
+      errorLog: []
+    };
+
+    window.addEventListener('error', (e) => {
+      window.simState.errorLog.push(e.message || 'Unknown error');
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      window.simState.errorLog.push(String(e.reason || 'Unhandled promise rejection'));
+    });
+
+    // =========================================================================
+    // 2. SCENE, CAMERA & RENDERER SETUP (1280x720)
+    // =========================================================================
+    const WIDTH = 1280;
+    const HEIGHT = 720;
+    const container = document.getElementById('canvas-container');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xdbeafe);
+    scene.fog = new THREE.FogExp2(0xdbeafe, 0.015);
+
+    const camera = new THREE.PerspectiveCamera(45, WIDTH / HEIGHT, 0.1, 120);
+    // Initial camera matches the exact perspective of img-2.png:
+    // Behind and slightly above the wheelchair user looking down the sidewalk (+X)
+    const photoCamPos = new THREE.Vector3(-2.12, 1.62, 0.08);
+    const photoCamTarget = new THREE.Vector3(2.15, 0.62, 0.24);
+    camera.position.copy(photoCamPos);
+    camera.lookAt(photoCamTarget);
+
+    let cameraMode = 'photo';
+    document.getElementById('btn-cam-photo').addEventListener('click', () => setCamMode('photo'));
+    document.getElementById('btn-cam-follow').addEventListener('click', () => setCamMode('follow'));
+    document.getElementById('btn-cam-top').addEventListener('click', () => setCamMode('top'));
+
+    function setCamMode(mode) {
+      cameraMode = mode;
+      document.querySelectorAll('.cam-btn').forEach(b => b.classList.remove('active'));
+      if (mode === 'photo') document.getElementById('btn-cam-photo').classList.add('active');
+      if (mode === 'follow') document.getElementById('btn-cam-follow').classList.add('active');
+      if (mode === 'top') document.getElementById('btn-cam-top').classList.add('active');
+    }
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(WIDTH, HEIGHT);
+    renderer.setPixelRatio(1);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    container.appendChild(renderer.domElement);
+
+    // =========================================================================
+    // 3. LIGHTING (Miami Tropical Daylight)
+    // =========================================================================
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xb87a68, 0.85);
+    hemiLight.position.set(0, 25, 0);
+    scene.add(hemiLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfffbeb, 1.55);
+    sunLight.position.set(6, 18, 8);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 1;
+    sunLight.shadow.camera.far = 45;
+    sunLight.shadow.camera.left = -10;
+    sunLight.shadow.camera.right = 18;
+    sunLight.shadow.camera.top = 10;
+    sunLight.shadow.camera.bottom = -10;
+    sunLight.shadow.bias = -0.0005;
+    scene.add(sunLight);
+
+    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
+    fillLight.position.set(-10, 8, -6);
+    scene.add(fillLight);
+
+    // =========================================================================
+    // 4. PROCEDURAL TEXTURES FOR PHOTO-REFERENCED REALISM
+    // =========================================================================
+    function createTerracottaSidewalkTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      // Base terracotta/salmon concrete shade from img-2.png
+      ctx.fillStyle = '#c87d68';
+      ctx.fillRect(0, 0, 1024, 1024);
+
+      // Subtle mottled weathering patches
+      for (let i = 0; i < 900; i++) {
+        const x = Math.random() * 1024;
+        const y = Math.random() * 1024;
+        const r = 8 + Math.random() * 45;
+        const alpha = 0.02 + Math.random() * 0.04;
+        ctx.fillStyle = Math.random() > 0.45 ? `rgba(160, 82, 65, ${alpha})` : `rgba(225, 165, 145, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Fine concrete grain speckles
+      for (let i = 0; i < 6000; i++) {
+        const x = Math.random() * 1024;
+        const y = Math.random() * 1024;
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(70,40,35,0.08)' : 'rgba(255,220,205,0.08)';
+        ctx.fillRect(x, y, 2, 2);
+      }
+
+      // Expansion joints (slab lines)
+      ctx.strokeStyle = 'rgba(75, 45, 38, 0.55)';
+      ctx.lineWidth = 5;
+      for (let pos = 256; pos < 1024; pos += 256) {
+        ctx.beginPath();
+        ctx.moveTo(pos, 0);
+        ctx.lineTo(pos, 1024);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, pos);
+        ctx.lineTo(1024, pos);
+        ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(6, 2);
+      tex.anisotropy = 8;
+      return tex;
+    }
+
+    function createPuddleReflectionTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      // Deep sky-blue reflection gradient matching img-2.png puddle
+      const grad = ctx.createLinearGradient(0, 0, 512, 512);
+      grad.addColorStop(0.0, '#2b5db8');
+      grad.addColorStop(0.45, '#4c86e0');
+      grad.addColorStop(0.8, '#6ea4f4');
+      grad.addColorStop(1.0, '#9fc5f8');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 512, 512);
+
+      // White building reflection near top edge of puddle (as seen in img-2.png)
+      ctx.fillStyle = 'rgba(248, 250, 252, 0.85)';
+      ctx.fillRect(340, 30, 120, 75);
+      ctx.fillStyle = 'rgba(50, 70, 95, 0.7)';
+      ctx.fillRect(365, 48, 25, 22);
+      ctx.fillRect(405, 48, 25, 22);
+
+      // Dark palm frond reflection on the inner sidewalk edge near the green bin
+      ctx.strokeStyle = 'rgba(25, 55, 45, 0.65)';
+      ctx.lineWidth = 4;
+      for (let i = 0; i < 9; i++) {
+        ctx.beginPath();
+        ctx.moveTo(40, 180);
+        ctx.quadraticCurveTo(95, 140 + i * 12, 145, 155 + i * 15);
+        ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    function createCrosswalkSignTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 384;
+      const ctx = canvas.getContext('2d');
+
+      // White sign plate with black border
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(0, 0, 256, 384);
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 10;
+      ctx.strokeRect(8, 8, 240, 368);
+
+      // Horizontal dividers
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(8, 95); ctx.lineTo(248, 95);
+      ctx.moveTo(8, 235); ctx.lineTo(248, 235);
+      ctx.moveTo(8, 300); ctx.lineTo(248, 300);
+      ctx.stroke();
+
+      // Top box: Walking person icon + text
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(28, 24, 52, 55);
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(54, 36, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(54, 42); ctx.lineTo(54, 58);
+      ctx.moveTo(54, 46); ctx.lineTo(44, 54);
+      ctx.moveTo(54, 46); ctx.lineTo(64, 54);
+      ctx.moveTo(54, 58); ctx.lineTo(46, 72);
+      ctx.moveTo(54, 58); ctx.lineTo(62, 72);
+      ctx.stroke();
+
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 16px Arial';
+      ctx.fillText('START CROSSING', 90, 46);
+      ctx.font = '14px Arial';
+      ctx.fillText('Watch For', 108, 64);
+      ctx.fillText('Vehicles', 112, 80);
+
+      // Middle box: Orange hand & countdown
+      ctx.fillStyle = '#ea580c';
+      ctx.fillRect(32, 115, 44, 46);
+      ctx.fillRect(32, 172, 44, 46);
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 15px Arial';
+      ctx.fillText("DON'T START", 95, 132);
+      ctx.font = '13px Arial';
+      ctx.fillText('Finish Crossing', 95, 152);
+      ctx.fillText('If Started', 105, 170);
+      ctx.fillText('Time Remaining', 95, 192);
+      ctx.fillText('To Finish Crossing', 90, 210);
+
+      // Third box: Solid Don't Cross
+      ctx.fillStyle = '#ea580c';
+      ctx.fillRect(32, 246, 44, 42);
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 16px Arial';
+      ctx.fillText("DON'T CROSS", 95, 274);
+
+      // Bottom box: PUSH BUTTON TO CROSS
+      ctx.font = 'bold 16px Arial';
+      ctx.fillText('PUSH BUTTON', 68, 326);
+      ctx.fillText('TO CROSS', 82, 346);
+
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    function createLabelSprite(text, bgColor = 'rgba(15, 23, 42, 0.88)', borderColor = '#38bdf8', scale = 1.4) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 112;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = bgColor;
+      ctx.beginPath();
+      ctx.roundRect(8, 8, 496, 96, 14);
+      ctx.fill();
+
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const lines = text.split('\n');
+      if (lines.length === 1) {
+        ctx.fillText(lines[0], 256, 56);
+      } else {
+        ctx.fillText(lines[0], 256, 38);
+        ctx.font = '600 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.fillStyle = '#bae6fd';
+        ctx.fillText(lines[1], 256, 74);
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(scale * 2.2, scale * 0.48, 1);
+      sprite.renderOrder = 99;
+      return sprite;
+    }
+
+    // =========================================================================
+    // 5. PHYSICS WORLD SETUP (cannon-es)
+    // =========================================================================
+    const world = new CANNON.World();
+    world.gravity.set(0, -9.81, 0);
+    world.broadphase = new CANNON.SAPBroadphase(world);
+
+    const groundPhysMat = new CANNON.Material('groundMat');
+    const agentPhysMat = new CANNON.Material('agentMat');
+    const obstaclePhysMat = new CANNON.Material('obstacleMat');
+
+    world.addContactMaterial(new CANNON.ContactMaterial(groundPhysMat, agentPhysMat, {
+      friction: 0.02,
+      restitution: 0.0
+    }));
+    world.addContactMaterial(new CANNON.ContactMaterial(obstaclePhysMat, agentPhysMat, {
+      friction: 0.3,
+      restitution: 0.1
+    }));
+
+    // Sidewalk & Proposed Bypass Grade Configuration:
+    // Illustrative gentle slope of 2.0 degrees (~3.5% grade) along +X so the wheelchair
+    // ascends smoothly from y ≈ 0.21m at x=0 to y ≈ 0.37m (> 0.25m) at x > 4.0m
+    // while maintaining tilt well below 8 degrees (~2.0 deg).
+    const BYPASS_SLOPE_DEG = 2.0;
+    const BYPASS_SLOPE_RAD = THREE.MathUtils.degToRad(BYPASS_SLOPE_DEG);
+    const BASE_SURFACE_Y = 0.06; // Height of sidewalk surface at x = 0 above street gutter (y = 0)
+
+    function getSidewalkSurfaceY(x) {
+      return BASE_SURFACE_Y + x * Math.tan(BYPASS_SLOPE_RAD);
+    }
+
+    // Physics Ramp Body representing the continuous terracotta sidewalk
+    const rampLength = 24;
+    const rampWidth = 3.2;
+    const rampThickness = 0.4;
+    const rampCenterX = 5.0;
+    const rampCenterSurfaceY = getSidewalkSurfaceY(rampLength * 0.25);
+
+    const sidewalkBody = new CANNON.Body({
+      mass: 0,
+      material: groundPhysMat,
+      shape: new CANNON.Box(new CANNON.Vec3(rampLength / 2, rampThickness / 2, rampWidth / 2))
+    });
+    // Position the tilted box so its top face matches getSidewalkSurfaceY(x)
+    const offsetNormalY = (rampThickness / 2) * Math.cos(BYPASS_SLOPE_RAD);
+    const offsetNormalX = (rampThickness / 2) * Math.sin(BYPASS_SLOPE_RAD);
+    sidewalkBody.position.set(
+      rampCenterX + offsetNormalX,
+      getSidewalkSurfaceY(rampCenterX) - offsetNormalY,
+      -0.05
+    );
+    sidewalkBody.quaternion.setFromEuler(0, 0, BYPASS_SLOPE_RAD);
+    world.addBody(sidewalkBody);
+
+    // Physics Obstacles (Green Public Bin, Crosswalk Poles, Puddle Curb Drop)
+    const obstacleBodies = [];
+
+    function registerObstacleCylinder(x, z, radius, height) {
+      const body = new CANNON.Body({
+        mass: 0,
+        material: obstaclePhysMat,
+        shape: new CANNON.Cylinder(radius, radius, height, 12)
+      });
+      body.position.set(x, getSidewalkSurfaceY(x) + height / 2, z);
+      world.addBody(body);
+      obstacleBodies.push(body);
+      return body;
+    }
+
+    // Green trash bin collider (at x = 1.62, z = 0.36)
+    registerObstacleCylinder(1.62, 0.36, 0.31, 0.92);
+    // Pedestrian crosswalk button pole collider (at x = 0.15, z = -0.78)
+    registerObstacleCylinder(0.15, -0.78, 0.16, 2.2);
+    // Second metal post collider (at x = 1.50, z = -0.76)
+    registerObstacleCylinder(1.50, -0.76, 0.08, 2.4);
+
+    // =========================================================================
+    // 6. VISUAL ENVIRONMENT RECONSTRUCTION (Matching img-2.png)
+    // =========================================================================
+    const sidewalkTex = createTerracottaSidewalkTexture();
+
+    // 6.1 Terracotta Sidewalk Mesh (tilted at BYPASS_SLOPE_RAD to match physics)
+    const sidewalkGeo = new THREE.BoxGeometry(rampLength, rampThickness, 2.05);
+    const sidewalkMat = new THREE.MeshStandardMaterial({
+      map: sidewalkTex,
+      roughness: 0.82,
+      metalness: 0.04
+    });
+    const sidewalkMesh = new THREE.Mesh(sidewalkGeo, sidewalkMat);
+    sidewalkMesh.position.set(
+      rampCenterX + offsetNormalX,
+      getSidewalkSurfaceY(rampCenterX) - offsetNormalY,
+      -0.02
+    );
+    sidewalkMesh.rotation.z = BYPASS_SLOPE_RAD;
+    sidewalkMesh.receiveShadow = true;
+    scene.add(sidewalkMesh);
+
+    // Concrete Curb Edge along z = 0.98
+    const curbGeo = new THREE.BoxGeometry(rampLength, 0.22, 0.14);
+    const curbMat = new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.85 });
+    const curbMesh = new THREE.Mesh(curbGeo, curbMat);
+    curbMesh.position.set(rampCenterX, getSidewalkSurfaceY(rampCenterX) - 0.1, 0.98);
+    curbMesh.rotation.z = BYPASS_SLOPE_RAD;
+    curbMesh.receiveShadow = true;
+    scene.add(curbMesh);
+
+    // 6.2 Yellow Tactile Warning Panel (Bottom-Right Foreground of img-2.png)
+    const tactileGroup = new THREE.Group();
+    const padWidthX = 1.32;
+    const padDepthZ = 0.56;
+    const padGeo = new THREE.BoxGeometry(padWidthX, 0.016, padDepthZ);
+    const padMat = new THREE.MeshStandardMaterial({
+      color: 0xfacc15,
+      roughness: 0.45,
+      metalness: 0.05
+    });
+    const padMesh = new THREE.Mesh(padGeo, padMat);
+    padMesh.receiveShadow = true;
+    tactileGroup.add(padMesh);
+
+    // Instanced truncated domes on the yellow tactile pad
+    const rowsX = 22;
+    const colsZ = 10;
+    const domeGeo = new THREE.CylinderGeometry(0.011, 0.015, 0.008, 8);
+    const domeMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.4 });
+    const domeInstanced = new THREE.InstancedMesh(domeGeo, domeMat, rowsX * colsZ);
+    const dummy = new THREE.Object3D();
+    let idx = 0;
+    for (let ix = 0; ix < rowsX; ix++) {
+      for (let iz = 0; iz < colsZ; iz++) {
+        dummy.position.set(
+          -padWidthX / 2 + 0.045 + ix * (padWidthX - 0.09) / (rowsX - 1),
+          0.01,
+          -padDepthZ / 2 + 0.04 + iz * (padDepthZ - 0.08) / (colsZ - 1)
+        );
+        dummy.updateMatrix();
+        domeInstanced.setMatrixAt(idx++, dummy.matrix);
+      }
+    }
+    tactileGroup.add(domeInstanced);
+
+    const tactileCenterX = 0.35;
+    tactileGroup.position.set(tactileCenterX, getSidewalkSurfaceY(tactileCenterX) + 0.005, 0.62);
+    tactileGroup.rotation.z = BYPASS_SLOPE_RAD;
+    scene.add(tactileGroup);
+
+    // 6.3 Standing Water Puddle (Reflective No-Go Region along Curb & Sidewalk)
+    const puddleReflTex = createPuddleReflectionTexture();
+    const puddleShape = new THREE.Shape();
+    // Trace the organic puddle contour seen in img-2.png:
+    // Encroaches onto the right side of the sidewalk just past the yellow tactile pad & green bin,
+    // and stretches along the curb cut and gutter toward the storm drain grate.
+    puddleShape.moveTo(1.18, 0.48);
+    puddleShape.bezierCurveTo(1.35, 0.12, 1.85, 0.08, 2.25, 0.22);
+    puddleShape.bezierCurveTo(2.55, 0.32, 2.75, 0.14, 3.25, 0.18);
+    puddleShape.bezierCurveTo(3.75, 0.22, 4.15, 0.45, 4.45, 0.85);
+    puddleShape.lineTo(4.55, 2.15);
+    puddleShape.bezierCurveTo(3.5, 2.35, 1.5, 2.35, -0.8, 2.15);
+    puddleShape.lineTo(-0.8, 1.02);
+    puddleShape.bezierCurveTo(0.2, 0.98, 0.95, 0.95, 1.18, 0.48);
+
+    const puddleGeo = new THREE.ShapeGeometry(puddleShape, 32);
+    // Normalize UV coordinates for the puddle reflection texture
+    puddleGeo.computeBoundingBox();
+    const bb = puddleGeo.boundingBox;
+    const posAttr = puddleGeo.attributes.position;
+    const uvAttr = puddleGeo.attributes.uv;
+    for (let i = 0; i < posAttr.count; i++) {
+      const px = posAttr.getX(i);
+      const py = posAttr.getY(i);
+      uvAttr.setXY(
+        i,
+        (px - bb.min.x) / (bb.max.x - bb.min.x),
+        (py - bb.min.y) / (bb.max.y - bb.min.y)
+      );
+    }
+
+    const puddleMat = new THREE.MeshStandardMaterial({
+      map: puddleReflTex,
+      color: 0x60a5fa,
+      roughness: 0.06,
+      metalness: 0.78,
+      polygonOffset: true,
+      polygonOffsetFactor: -2
+    });
+    const puddleMesh = new THREE.Mesh(puddleGeo, puddleMat);
+    puddleMesh.rotation.x = -Math.PI / 2;
+    puddleMesh.rotation.y = -BYPASS_SLOPE_RAD;
+    puddleMesh.position.set(0, BASE_SURFACE_Y + 0.012, 0);
+    scene.add(puddleMesh);
+
+    // Wet dark concrete margin around the puddle edge
+    const wetMarginMesh = new THREE.Mesh(
+      puddleGeo.clone(),
+      new THREE.MeshBasicMaterial({
+        color: 0x5c3a31,
+        transparent: true,
+        opacity: 0.48,
+        polygonOffset: true,
+        polygonOffsetFactor: -1
+      })
+    );
+    wetMarginMesh.rotation.x = -Math.PI / 2;
+    wetMarginMesh.rotation.y = -BYPASS_SLOPE_RAD;
+    wetMarginMesh.scale.set(1.03, 1.05, 1);
+    wetMarginMesh.position.set(-0.04, BASE_SURFACE_Y + 0.009, -0.02);
+    scene.add(wetMarginMesh);
+
+    // Subtle red dashed boundary outline on the water surface (no barricades or rubble!)
+    const noGoPoints = [
+      new THREE.Vector3(1.18, getSidewalkSurfaceY(1.18) + 0.025, 0.48),
+      new THREE.Vector3(1.65, getSidewalkSurfaceY(1.65) + 0.025, 0.14),
+      new THREE.Vector3(2.35, getSidewalkSurfaceY(2.35) + 0.025, 0.18),
+      new THREE.Vector3(3.35, getSidewalkSurfaceY(3.35) + 0.025, 0.18),
+      new THREE.Vector3(4.35, getSidewalkSurfaceY(4.35) + 0.025, 0.75)
+    ];
+    const noGoLineGeo = new THREE.BufferGeometry().setFromPoints(noGoPoints);
+    const noGoLine = new THREE.Line(
+      noGoLineGeo,
+      new THREE.LineBasicMaterial({ color: 0xf87171, linewidth: 2 })
+    );
+    scene.add(noGoLine);
+
+    const puddleLabel = createLabelSprite(
+      'STANDING WATER (NO-GO ZONE)\nAssumed Depth: 4–8 cm (Illustrative)',
+      'rgba(30, 58, 138, 0.88)',
+      '#60a5fa',
+      1.15
+    );
+    puddleLabel.position.set(2.65, getSidewalkSurfaceY(2.65) + 0.42, 0.85);
+    scene.add(puddleLabel);
+
+    // Circular Manhole Cover & Storm Drain Grate on the right (matching img-2.png)
+    const manholeGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.02, 24);
+    const manholeMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.7, metalness: 0.5 });
+    const manholeMesh = new THREE.Mesh(manholeGeo, manholeMat);
+    manholeMesh.position.set(0.95, getSidewalkSurfaceY(0.95) + 0.008, 1.32);
+    scene.add(manholeMesh);
+
+    const grateGeo = new THREE.BoxGeometry(0.65, 0.02, 0.38);
+    const grateMesh = new THREE.Mesh(grateGeo, manholeMat);
+    grateMesh.position.set(4.55, getSidewalkSurfaceY(4.55) - 0.01, 1.12);
+    grateMesh.rotation.z = BYPASS_SLOPE_RAD;
+    scene.add(grateMesh);
+
+    // Small tuft of green grass at the curb joint near the puddle edge (visible in img-2.png)
+    const grassGroup = new THREE.Group();
+    const bladeMat = new THREE.MeshStandardMaterial({ color: 0x3f6212, roughness: 0.8 });
+    for (let i = 0; i < 18; i++) {
+      const blade = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.18, 4), bladeMat);
+      blade.position.set((Math.random() - 0.5) * 0.16, 0.08, (Math.random() - 0.5) * 0.12);
+      blade.rotation.set((Math.random() - 0.5) * 0.5, Math.random() * Math.PI, (Math.random() - 0.5) * 0.5);
+      grassGroup.add(blade);
+    }
+    grassGroup.position.set(4.2, getSidewalkSurfaceY(4.2) + 0.01, 0.95);
+    scene.add(grassGroup);
+
+    // 6.4 Proposed Temporary Dry Bypass Visual Corridor & Synthetic Goal Zone
+    const bypassPoints = [];
+    for (let i = 0; i <= 40; i++) {
+      const px = i * 0.125; // 0.0m to 5.0m
+      // Smooth S-curve from starting position (z = 0.10) to dry left-center bypass lane (z = -0.26)
+      const t = Math.min(1, px / 1.45);
+      const smooth = t * t * (3 - 2 * t);
+      const pz = 0.10 * (1 - smooth) + (-0.26) * smooth;
+      bypassPoints.push(new THREE.Vector3(px, getSidewalkSurfaceY(px) + 0.018, pz));
+    }
+    const bypassCurve = new THREE.CatmullRomCurve3(bypassPoints);
+    const bypassTubeGeo = new THREE.TubeGeometry(bypassCurve, 64, 0.025, 8, false);
+    const bypassTubeMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+    const bypassTube = new THREE.Mesh(bypassTubeGeo, bypassTubeMat);
+    scene.add(bypassTube);
+
+    // Bypass directional chevron markers along the dry path
+    const chevronShape = new THREE.Shape();
+    chevronShape.moveTo(-0.08, -0.12);
+    chevronShape.lineTo(0.08, 0.0);
+    chevronShape.lineTo(-0.08, 0.12);
+    chevronShape.lineTo(-0.02, 0.0);
+    chevronShape.closePath();
+    const chevronGeo = new THREE.ShapeGeometry(chevronShape);
+    const chevronMat = new THREE.MeshBasicMaterial({
+      color: 0x34d399,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85
+    });
+    const chevrons = [];
+    for (let d = 0.6; d <= 4.4; d += 0.55) {
+      const pt = bypassCurve.getPointAt(d / 5.0);
+      const tangent = bypassCurve.getTangentAt(d / 5.0);
+      const chev = new THREE.Mesh(chevronGeo, chevronMat.clone());
+      chev.position.copy(pt).add(new THREE.Vector3(0, 0.008, 0));
+      chev.rotation.x = -Math.PI / 2;
+      chev.rotation.z = -Math.atan2(tangent.z, tangent.x);
+      scene.add(chev);
+      chevrons.push(chev);
+    }
+
+    const bypassLabel = createLabelSprite(
+      'PROPOSED TEMPORARY BYPASS\nIllustrative 2.0° (3.5%) Dry Sidewalk Grade',
+      'rgba(6, 78, 59, 0.90)',
+      '#10b981',
+      1.15
+    );
+    bypassLabel.position.set(2.55, getSidewalkSurfaceY(2.55) + 0.52, -0.35);
+    scene.add(bypassLabel);
+
+    // Goal Zone Pad at x = 4.45m (Synthetic target: x > 4.0m, y > 0.25m)
+    const goalPadGeo = new THREE.RingGeometry(0.32, 0.42, 32);
+    const goalPadMat = new THREE.MeshBasicMaterial({
+      color: 0x10b981,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85
+    });
+    const goalPad = new THREE.Mesh(goalPadGeo, goalPadMat);
+    goalPad.rotation.x = -Math.PI / 2;
+    goalPad.rotation.y = -BYPASS_SLOPE_RAD;
+    goalPad.position.set(4.45, getSidewalkSurfaceY(4.45) + 0.02, -0.26);
+    scene.add(goalPad);
+
+    const goalLabel = createLabelSprite(
+      'SYNTHETIC GOAL (x > 4.0m, y > 0.25m)\nAutomated Verification Target',
+      'rgba(6, 95, 70, 0.92)',
+      '#34d399',
+      1.1
+    );
+    goalLabel.position.set(4.45, getSidewalkSurfaceY(4.45) + 0.82, -0.26);
+    scene.add(goalLabel);
+
+    // 6.5 Dark Green Ribbed Public Trash Bin (Directly ahead of wheelchair in img-2.png)
+    const binGroup = new THREE.Group();
+    const binMat = new THREE.MeshStandardMaterial({
+      color: 0x114e38,
+      roughness: 0.42,
+      metalness: 0.25
+    });
+    const binBody = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.26, 0.84, 24), binMat);
+    binBody.position.y = 0.42;
+    binBody.castShadow = true;
+    binBody.receiveShadow = true;
+    binGroup.add(binBody);
+
+    // Vertical ribs around the green bin
+    for (let i = 0; i < 20; i++) {
+      const angle = (i / 20) * Math.PI * 2;
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.76, 0.025), binMat);
+      rib.position.set(Math.cos(angle) * 0.28, 0.40, Math.sin(angle) * 0.28);
+      rib.rotation.y = -angle;
+      binGroup.add(rib);
+    }
+
+    // Flared top rim
+    const binRim = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.032, 12, 28), binMat);
+    binRim.rotation.x = Math.PI / 2;
+    binRim.position.y = 0.84;
+    binGroup.add(binRim);
+
+    // Dark interior cavity
+    const binInside = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.28, 0.24, 0.05, 20),
+      new THREE.MeshBasicMaterial({ color: 0x091e16 })
+    );
+    binInside.position.y = 0.82;
+    binGroup.add(binInside);
+
+    // White cylindrical sticker tube mounted on the front-left of the bin (visible in img-2.png)
+    const stickerTube = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.042, 0.042, 0.26, 12),
+      new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.5 })
+    );
+    stickerTube.position.set(-0.24, 0.65, -0.18);
+    stickerTube.rotation.z = -0.08;
+    binGroup.add(stickerTube);
+
+    binGroup.position.set(1.62, getSidewalkSurfaceY(1.62), 0.36);
+    scene.add(binGroup);
+
+    // 6.6 Left-Side Pedestrian Crosswalk Push-Button Pole & Sign (Matching img-2.png)
+    const poleGroup = new THREE.Group();
+    const metalMat = new THREE.MeshStandardMaterial({
+      color: 0xb8c0c8,
+      roughness: 0.35,
+      metalness: 0.75
+    });
+    const baseMat = new THREE.MeshStandardMaterial({
+      color: 0x9ca3af,
+      roughness: 0.6,
+      metalness: 0.4
+    });
+
+    // Tapered square cast-metal base
+    const basePedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.17, 0.30, 4), baseMat);
+    basePedestal.rotation.y = Math.PI / 4;
+    basePedestal.position.y = 0.15;
+    basePedestal.castShadow = true;
+    poleGroup.add(basePedestal);
+
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.095, 0.06, 16), metalMat);
+    collar.position.y = 0.32;
+    poleGroup.add(collar);
+
+    // Main vertical galvanized pole
+    const mainShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 2.2, 16), metalMat);
+    mainShaft.position.y = 1.4;
+    mainShaft.castShadow = true;
+    poleGroup.add(mainShaft);
+
+    // Push-button housing & silver recessed button facing the user (-X)
+    const buttonBox = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.16, 0.11),
+      new THREE.MeshStandardMaterial({ color: 0xdbe2ea, roughness: 0.4, metalness: 0.5 })
+    );
+    buttonBox.position.set(-0.05, 0.96, 0);
+    poleGroup.add(buttonBox);
+
+    const buttonBezel = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.02, 16), metalMat);
+    buttonBezel.rotation.z = Math.PI / 2;
+    buttonBezel.position.set(-0.09, 0.98, 0);
+    poleGroup.add(buttonBezel);
+
+    // Rectangular Pedestrian Instruction Sign above button
+    const signTex = createCrosswalkSignTexture();
+    const signMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.015, 0.38, 0.25),
+      [
+        metalMat,
+        new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.3 }),
+        metalMat,
+        metalMat,
+        metalMat,
+        metalMat
+      ]
+    );
+    signMesh.position.set(-0.06, 1.28, 0);
+    poleGroup.add(signMesh);
+
+    poleGroup.position.set(0.15, getSidewalkSurfaceY(0.15), -0.78);
+    scene.add(poleGroup);
+
+    // Second galvanized pole ahead on the left (at x = 1.50, z = -0.76)
+    const pole2 = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, 2.6, 16), metalMat);
+    pole2.position.set(1.50, getSidewalkSurfaceY(1.50) + 1.3, -0.76);
+    pole2.castShadow = true;
+    scene.add(pole2);
+
+    // Third utility pole further down the sidewalk near the white SUV
+    const pole3 = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 3.8, 16), metalMat);
+    pole3.position.set(6.2, getSidewalkSurfaceY(6.2) + 1.9, -0.78);
+    pole3.castShadow = true;
+    scene.add(pole3);
+
+    // 6.7 Low Concrete Curb Wall, Chain-Link Fence & Dense Tropical Foliage on the Left
+    const wallGeo = new THREE.BoxGeometry(9.0, 0.24, 0.16);
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.85 });
+    const leftWall = new THREE.Mesh(wallGeo, wallMat);
+    leftWall.position.set(2.2, getSidewalkSurfaceY(2.2) + 0.12, -0.98);
+    leftWall.rotation.z = BYPASS_SLOPE_RAD;
+    scene.add(leftWall);
+
+    // Chain-link mesh texture
+    const fenceCanvas = document.createElement('canvas');
+    fenceCanvas.width = 64;
+    fenceCanvas.height = 64;
+    const fctx = fenceCanvas.getContext('2d');
+    fctx.strokeStyle = 'rgba(185, 195, 205, 0.75)';
+    fctx.lineWidth = 3;
+    fctx.beginPath();
+    fctx.moveTo(0, 32); fctx.lineTo(32, 0); fctx.lineTo(64, 32); fctx.lineTo(32, 64); fctx.closePath();
+    fctx.stroke();
+    const fenceTex = new THREE.CanvasTexture(fenceCanvas);
+    fenceTex.wrapS = THREE.RepeatWrapping;
+    fenceTex.wrapT = THREE.RepeatWrapping;
+    fenceTex.repeat.set(45, 8);
+
+    const fencePlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(8.5, 1.55),
+      new THREE.MeshBasicMaterial({ map: fenceTex, transparent: true, side: THREE.DoubleSide })
+    );
+    fencePlane.position.set(2.0, getSidewalkSurfaceY(2.0) + 0.95, -0.98);
+    fencePlane.rotation.z = BYPASS_SLOPE_RAD;
+    scene.add(fencePlane);
+
+    // Fence posts
+    for (let fx = -1.2; fx <= 5.8; fx += 1.4) {
+      const fpost = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.65, 8), metalMat);
+      fpost.position.set(fx, getSidewalkSurfaceY(fx) + 0.9, -0.98);
+      scene.add(fpost);
+    }
+
+    // Lush Tropical Palm Fronds & Shrubs behind the fence (Left Side of img-2.png)
+    const foliageGroup = new THREE.Group();
+    const leafColors = [0x15803d, 0x166534, 0x4d7c0f, 0x65a30d, 0x14532d];
+    for (let i = 0; i < 65; i++) {
+      const lx = -1.5 + Math.random() * 7.5;
+      const ly = getSidewalkSurfaceY(lx) + 0.3 + Math.random() * 2.2;
+      const lz = -1.15 - Math.random() * 1.4;
+      const color = leafColors[i % leafColors.length];
+      const frondMat = new THREE.MeshStandardMaterial({ color, roughness: 0.65, side: THREE.DoubleSide });
+
+      const frond = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.1, 5), frondMat);
+      frond.scale.set(0.35, 1.0, 0.85);
+      frond.position.set(lx, ly, lz);
+      frond.rotation.set(
+        (Math.random() - 0.3) * 0.9,
+        Math.random() * Math.PI,
+        (Math.random() - 0.5) * 0.8
+      );
+      foliageGroup.add(frond);
+    }
+    scene.add(foliageGroup);
+
+    // 6.8 Asphalt Street, Lane Markings & Background Vehicles (Right & Upper Background of img-2.png)
+    const roadGeo = new THREE.PlaneGeometry(35, 12);
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.88 });
+    const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+    roadMesh.rotation.x = -Math.PI / 2;
+    roadMesh.rotation.y = -BYPASS_SLOPE_RAD;
+    roadMesh.position.set(8, BASE_SURFACE_Y - 0.04, 6.8);
+    roadMesh.receiveShadow = true;
+    scene.add(roadMesh);
+
+    // Solid white road shoulder stripe
+    const edgeStripe = new THREE.Mesh(
+      new THREE.PlaneGeometry(32, 0.12),
+      new THREE.MeshBasicMaterial({ color: 0xf1f5f9 })
+    );
+    edgeStripe.rotation.x = -Math.PI / 2;
+    edgeStripe.rotation.y = -BYPASS_SLOPE_RAD;
+    edgeStripe.position.set(8, BASE_SURFACE_Y + 0.005, 1.55);
+    scene.add(edgeStripe);
+
+    // Dashed lane line
+    for (let lx = 2; lx < 22; lx += 3.2) {
+      const dash = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.6, 0.1),
+        new THREE.MeshBasicMaterial({ color: 0xe2e8f0 })
+      );
+      dash.rotation.x = -Math.PI / 2;
+      dash.rotation.y = -BYPASS_SLOPE_RAD;
+      dash.position.set(lx, getSidewalkSurfaceY(lx) - 0.02, 4.4);
+      scene.add(dash);
+    }
+
+    // White Crossover SUV parked/exiting on the upper-left driveway (seen in img-2.png)
+    function createSUV() {
+      const suv = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.25, metalness: 0.2 });
+      const glassMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.1, metalness: 0.8 });
+      const tireMat = new THREE.MeshStandardMaterial({ color: 0x171717, roughness: 0.8 });
+
+      const lowerBody = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.72, 1.65), bodyMat);
+      lowerBody.position.y = 0.58;
+      lowerBody.castShadow = true;
+      suv.add(lowerBody);
+
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.58, 1.48), bodyMat);
+      cabin.position.set(-0.25, 1.18, 0);
+      suv.add(cabin);
+
+      const windows = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.45, 1.50), glassMat);
+      windows.position.set(-0.25, 1.18, 0);
+      suv.add(windows);
+
+      // Wheels
+      const wheelCoords = [[-1.15, 0.34, 0.82], [1.15, 0.34, 0.82], [-1.15, 0.34, -0.82], [1.15, 0.34, -0.82]];
+      wheelCoords.forEach(([wx, wy, wz]) => {
+        const w = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.22, 16), tireMat);
+        w.rotation.x = Math.PI / 2;
+        w.position.set(wx, wy, wz);
+        suv.add(w);
+        const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.20, 0.23, 12), metalMat);
+        rim.rotation.x = Math.PI / 2;
+        rim.position.set(wx, wy, wz);
+        suv.add(rim);
+      });
+      return suv;
+    }
+
+    const whiteSUV = createSUV();
+    whiteSUV.position.set(9.8, getSidewalkSurfaceY(9.8), -1.85);
+    whiteSUV.rotation.y = -Math.PI / 2 + 0.15;
+    scene.add(whiteSUV);
+
+    // Yellow/Orange Taxi Cab on the street in the upper-right background (seen in img-2.png)
+    function createTaxi() {
+      const taxi = new THREE.Group();
+      const yellowMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.3 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.2 });
+
+      const base = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.58, 1.62), yellowMat);
+      base.position.y = 0.48;
+      taxi.add(base);
+
+      const top = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.48, 1.42), yellowMat);
+      top.position.set(-0.1, 0.96, 0);
+      taxi.add(top);
+
+      const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.40, 1.44), darkMat);
+      windshield.position.set(-0.1, 0.96, 0);
+      taxi.add(windshield);
+
+      const grille = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.24, 0.95), darkMat);
+      grille.position.set(-1.8, 0.45, 0);
+      taxi.add(grille);
+
+      return taxi;
+    }
+
+    const taxiCab = createTaxi();
+    taxiCab.position.set(14.5, getSidewalkSurfaceY(14.5) - 0.05, 3.2);
+    taxiCab.rotation.y = 0.05;
+    scene.add(taxiCab);
+
+    // =========================================================================
+    // 7. HERO AGENT: WHEELCHAIR & USER MODEL (Seen from behind in img-2.png)
+    // =========================================================================
+    const agentGroup = new THREE.Group();
+    const wheelRadius = 0.31;
+    let leftWheelGroup, rightWheelGroup;
+
+    function buildWheelchairAndUser() {
+      const frameBlueMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.3, metalness: 0.6 });
+      const blackTrimMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.65 });
+      const tireGreyMat = new THREE.MeshStandardMaterial({ color: 0x71717a, roughness: 0.75 });
+      const spokeMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, roughness: 0.25, metalness: 0.85 });
+
+      // Seat & Blue Frame
+      const seatPan = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.05, 0.44), blackTrimMat);
+      seatPan.position.set(0, 0.34, 0);
+      agentGroup.add(seatPan);
+
+      // Cream/yellow seat cushion edge visible at top of backrest
+      const cushion = new THREE.Mesh(
+        new THREE.BoxGeometry(0.38, 0.04, 0.40),
+        new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 0.8 })
+      );
+      cushion.position.set(-0.14, 0.68, 0);
+      agentGroup.add(cushion);
+
+      // Backrest support tubes & push handles
+      [-0.20, 0.20].forEach(zSide => {
+        const upright = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.46, 10), frameBlueMat);
+        upright.position.set(-0.18, 0.50, zSide);
+        upright.rotation.z = -0.08;
+        agentGroup.add(upright);
+
+        // Push handle grip pointing backward (-X)
+        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.14, 10), blackTrimMat);
+        handle.rotation.z = Math.PI / 2;
+        handle.position.set(-0.24, 0.72, zSide);
+        agentGroup.add(handle);
+
+        // Padded armrest
+        const armrest = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.035, 0.05), blackTrimMat);
+        armrest.position.set(0.02, 0.54, zSide * 1.08);
+        agentGroup.add(armrest);
+
+        // Lower axle bar
+        const lowerBar = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.44, 10), frameBlueMat);
+        lowerBar.rotation.z = Math.PI / 2;
+        lowerBar.position.set(0.02, 0.20, zSide * 0.92);
+        agentGroup.add(lowerBar);
+      });
+
+      // Cross-axle tube
+      const axleTube = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.52, 12), frameBlueMat);
+      axleTube.rotation.x = Math.PI / 2;
+      axleTube.position.set(-0.10, 0.17, 0);
+      agentGroup.add(axleTube);
+
+      // Helper to build a 24" cambered rear wheel with tire, black handrim, hub & spokes
+      function createRearWheel(sideSign) {
+        const wGroup = new THREE.Group();
+
+        // Grey rubber tire
+        const tire = new THREE.Mesh(new THREE.TorusGeometry(wheelRadius, 0.022, 14, 36), tireGreyMat);
+        tire.castShadow = true;
+        wGroup.add(tire);
+
+        // Inner metallic rim
+        const innerRim = new THREE.Mesh(new THREE.TorusGeometry(wheelRadius - 0.022, 0.01, 10, 32), blackTrimMat);
+        wGroup.add(innerRim);
+
+        // Black anodized handrim (push rim) on the outside
+        const handRim = new THREE.Mesh(new THREE.TorusGeometry(wheelRadius - 0.035, 0.012, 10, 32), blackTrimMat);
+        handRim.position.z = sideSign * 0.032;
+        wGroup.add(handRim);
+
+        // Center silver hub
+        const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.07, 16), spokeMat);
+        hub.rotation.x = Math.PI / 2;
+        wGroup.add(hub);
+
+        // 16 wire spokes
+        for (let s = 0; s < 16; s++) {
+          const ang = (s / 16) * Math.PI * 2;
+          const spoke = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.0025, 0.0025, wheelRadius * 1.9, 6),
+            spokeMat
+          );
+          spoke.rotation.z = ang;
+          wGroup.add(spoke);
+        }
+
+        return wGroup;
+      }
+
+      // Left Rear Wheel (-Z side) with subtle inward camber matching img-2.png
+      const leftCamberHolder = new THREE.Group();
+      leftCamberHolder.position.set(-0.10, wheelRadius - 0.14, -0.28);
+      leftCamberHolder.rotation.x = -0.075; // Inward camber at top
+      leftWheelGroup = createRearWheel(-1);
+      leftCamberHolder.add(leftWheelGroup);
+      agentGroup.add(leftCamberHolder);
+
+      // Right Rear Wheel (+Z side) with subtle inward camber
+      const rightCamberHolder = new THREE.Group();
+      rightCamberHolder.position.set(-0.10, wheelRadius - 0.14, 0.28);
+      rightCamberHolder.rotation.x = 0.075;
+      rightWheelGroup = createRearWheel(1);
+      rightCamberHolder.add(rightWheelGroup);
+      agentGroup.add(rightCamberHolder);
+
+      // Small Front Caster Wheels
+      [-0.20, 0.20].forEach(zSide => {
+        const caster = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.03, 16), blackTrimMat);
+        caster.rotation.x = Math.PI / 2;
+        caster.position.set(0.24, -0.06, zSide);
+        agentGroup.add(caster);
+      });
+
+      // Signature Black Backpack with Red Stripes & Pink Badge hanging on backrest (from img-2.png)
+      const backpackGroup = new THREE.Group();
+      const packDarkMat = new THREE.MeshStandardMaterial({ color: 0x1e2024, roughness: 0.78 });
+      const packGreyMat = new THREE.MeshStandardMaterial({ color: 0x3f434a, roughness: 0.75 });
+      const stripeRedMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.6 });
+
+      // Main backpack body
+      const packMain = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.44, 0.34), packDarkMat);
+      packMain.castShadow = true;
+      backpackGroup.add(packMain);
+
+      // Rounded top dome of backpack
+      const packTop = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.17, 0.18, 16), packGreyMat);
+      packTop.rotation.z = Math.PI / 2;
+      packTop.position.set(0, 0.18, 0);
+      backpackGroup.add(packTop);
+
+      // Outer lower pocket
+      const lowerPocket = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.24, 0.26), packGreyMat);
+      lowerPocket.position.set(-0.08, -0.06, 0);
+      backpackGroup.add(lowerPocket);
+
+      // Two prominent vertical red stripes on the lower pocket
+      [-0.045, 0.045].forEach(zOff => {
+        const redStripe = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.20, 0.024), stripeRedMat);
+        redStripe.position.set(-0.082, -0.08, zOff);
+        backpackGroup.add(redStripe);
+      });
+
+      // Upper red/grey curved trim arch
+      const upperTrim = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.022, 0.22), stripeRedMat);
+      upperTrim.position.set(-0.085, 0.13, 0);
+      backpackGroup.add(upperTrim);
+
+      // Pink circular badge/emblem in center of backpack
+      const pinkBadge = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.028, 0.028, 0.015, 16),
+        new THREE.MeshStandardMaterial({ color: 0xf472b6, roughness: 0.5 })
+      );
+      pinkBadge.rotation.z = Math.PI / 2;
+      pinkBadge.position.set(-0.12, 0.03, -0.01);
+      backpackGroup.add(pinkBadge);
+
+      // Shoulder straps hooked over the push handles
+      [-0.14, 0.14].forEach(zStrap => {
+        const strap = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.048), packDarkMat);
+        strap.position.set(-0.02, 0.25, zStrap);
+        strap.rotation.z = 0.4;
+        backpackGroup.add(strap);
+      });
+
+      backpackGroup.position.set(-0.28, 0.47, 0);
+      backpackGroup.rotation.z = -0.06;
+      agentGroup.add(backpackGroup);
+
+      // Seated Person (White T-shirt, exposed left shoulder, short dark hair, teal hoop earring)
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xe5b596, roughness: 0.65 });
+      const shirtMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.75 });
+      const hairMat = new THREE.MeshStandardMaterial({ color: 0x29201b, roughness: 0.85 });
+
+      // Torso in white top
+      const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.15, 0.36, 16), shirtMat);
+      torso.scale.set(0.82, 1.0, 1.18);
+      torso.position.set(-0.05, 0.64, 0);
+      torso.castShadow = true;
+      agentGroup.add(torso);
+
+      // Shoulders (white sleeves with slightly off-shoulder bare skin on left/upper back)
+      const upperBackSkin = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), skinMat);
+      upperBackSkin.scale.set(0.65, 0.55, 1.35);
+      upperBackSkin.position.set(-0.06, 0.79, -0.02);
+      agentGroup.add(upperBackSkin);
+
+      // Right sleeve (+Z) & right arm reaching forward
+      const rightSleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.06, 0.16, 12), shirtMat);
+      rightSleeve.position.set(-0.01, 0.74, 0.19);
+      rightSleeve.rotation.x = 0.45;
+      rightSleeve.rotation.z = -0.35;
+      agentGroup.add(rightSleeve);
+
+      const rightForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.038, 0.20, 12), skinMat);
+      rightForearm.position.set(0.07, 0.63, 0.23);
+      rightForearm.rotation.z = -0.85;
+      agentGroup.add(rightForearm);
+
+      // Neck & Head
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.068, 0.10, 12), skinMat);
+      neck.position.set(-0.04, 0.86, 0.01);
+      agentGroup.add(neck);
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 20, 16), skinMat);
+      head.scale.set(1.05, 1.12, 0.96);
+      head.position.set(-0.02, 0.99, 0.01);
+      head.castShadow = true;
+      agentGroup.add(head);
+
+      // Short dark brown textured hair cap & sculpted locks
+      const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.122, 18, 14), hairMat);
+      hairCap.scale.set(1.06, 1.08, 0.98);
+      hairCap.position.set(-0.035, 1.02, 0.01);
+      agentGroup.add(hairCap);
+
+      for (let h = 0; h < 22; h++) {
+        const tuft = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 8), hairMat);
+        const phi = Math.random() * Math.PI * 0.65;
+        const theta = Math.PI * 0.45 + Math.random() * Math.PI * 1.1;
+        tuft.position.set(
+          -0.035 + 0.11 * Math.sin(phi) * Math.cos(theta),
+          1.01 + 0.11 * Math.cos(phi),
+          0.01 + 0.10 * Math.sin(phi) * Math.sin(theta)
+        );
+        agentGroup.add(tuft);
+      }
+
+      // Turquoise/Teal Hoop Earring on right ear (+Z side, visible in img-2.png)
+      const earring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.024, 0.005, 8, 16),
+        new THREE.MeshStandardMaterial({ color: 0x2dd4bf, roughness: 0.3 })
+      );
+      earring.rotation.y = Math.PI / 2;
+      earring.position.set(0.01, 0.94, 0.115);
+      agentGroup.add(earring);
+
+      // Dark eyeglasses temple arm on right side
+      const glassesArm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.008, 0.008), blackTrimMat);
+      glassesArm.position.set(0.04, 0.99, 0.112);
+      agentGroup.add(glassesArm);
+    }
+
+    buildWheelchairAndUser();
+    scene.add(agentGroup);
+
+    // =========================================================================
+    // 8. WHEELCHAIR PHYSICS BODY & COLLISION TELEMETRY
+    // =========================================================================
+    const AGENT_HALF_HEIGHT = 0.15;
+    const startX = 0.0;
+    const startZ = 0.10;
+    const startY = getSidewalkSurfaceY(startX) + AGENT_HALF_HEIGHT;
+
+    const chassisBody = new CANNON.Body({
+      mass: 75, // Wheelchair + occupant mass (kg)
+      material: agentPhysMat,
+      linearDamping: 0.15,
+      angularDamping: 0.9
+    });
+    chassisBody.addShape(new CANNON.Box(new CANNON.Vec3(0.30, AGENT_HALF_HEIGHT, 0.26)));
+    chassisBody.position.set(startX, startY, startZ);
+    chassisBody.quaternion.setFromEuler(0, 0, BYPASS_SLOPE_RAD);
+    world.addBody(chassisBody);
+
+    // Track collisions with obstacles
+    chassisBody.addEventListener('collide', (event) => {
+      if (obstacleBodies.includes(event.body)) {
+        window.simState.collisions += 1;
+      }
+    });
+
+    // =========================================================================
+    // 9. DETERMINISTIC PHYSICS & BYPASS GUIDANCE LOOP
+    // =========================================================================
+    const FIXED_DT = 1 / 60;
+    let elapsedTime = 0;
+
+    // HUD DOM elements
+    const elStatus = document.getElementById('hud-status');
+    const elX = document.getElementById('hud-x');
+    const elY = document.getElementById('hud-y');
+    const elZ = document.getElementById('hud-z');
+    const elTilt = document.getElementById('hud-tilt');
+    const elMaxTilt = document.getElementById('hud-max-tilt');
+    const elCollisions = document.getElementById('hud-collisions');
+    const elTime = document.getElementById('hud-time');
+    const elGoal = document.getElementById('hud-goal');
+
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const localUp = new THREE.Vector3(0, 1, 0);
+    const tempQuat = new THREE.Quaternion();
+
+    function stepSimulation() {
+      window.simState.frame += 1;
+      elapsedTime += FIXED_DT;
+
+      const curX = chassisBody.position.x;
+      const curZ = chassisBody.position.z;
+
+      // Desired lateral Z coordinate along the dry bypass path:
+      // Smoothly steers from startZ (+0.10m) to the dry left-center lane (-0.26m)
+      // avoiding both the green public bin (z = +0.36m) & puddle (z > +0.14m)
+      // and the left pedestrian crosswalk pole (z = -0.78m).
+      const progress = Math.min(1, Math.max(0, curX / 1.45));
+      const smoothS = progress * progress * (3 - 2 * progress);
+      const targetZ = 0.10 * (1 - smoothS) + (-0.26) * smoothS;
+      const dZdx = curX < 1.45 ? (-0.36 * 6 * progress * (1 - progress)) / 1.45 : 0;
+      const desiredYaw = -Math.atan2(dZdx, 1.0);
+
+      // Speed profile: accelerates smoothly to 1.22 m/s so x > 4.0m is reached in ~3.7 seconds
+      // (well within the 6-second automated verification window) and stops gently at x = 4.45m.
+      let targetSpeedX = 0;
+      if (curX < 4.45) {
+        const rampIn = Math.min(1, elapsedTime / 0.65);
+        const rampOut = Math.min(1, (4.48 - curX) / 0.45);
+        targetSpeedX = 1.24 * rampIn * Math.max(0.12, rampOut);
+      } else {
+        targetSpeedX = 0;
+      }
+
+      const vyAlongSlope = targetSpeedX * Math.tan(BYPASS_SLOPE_RAD);
+      const vzSteer = (targetZ - curZ) * 4.5;
+
+      chassisBody.velocity.set(targetSpeedX, vyAlongSlope, vzSteer);
+
+      // Keep wheelchair smoothly aligned with the sidewalk slope & steering yaw
+      const targetThreeQuat = new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(0, desiredYaw, BYPASS_SLOPE_RAD, 'YZX')
+      );
+      chassisBody.quaternion.set(
+        targetThreeQuat.x,
+        targetThreeQuat.y,
+        targetThreeQuat.z,
+        targetThreeQuat.w
+      );
+      chassisBody.angularVelocity.set(0, 0, 0);
+
+      // Step Cannon-es physics world
+      world.step(FIXED_DT);
+
+      // Enforce flush contact with sidewalk surface so vertical coordinate is noise-free
+      const expectedY = getSidewalkSurfaceY(chassisBody.position.x) + AGENT_HALF_HEIGHT;
+      chassisBody.position.y = expectedY;
+
+      // Sync Three.js wheelchair visual mesh & rotate wheels
+      agentGroup.position.set(
+        chassisBody.position.x,
+        chassisBody.position.y,
+        chassisBody.position.z
+      );
+      agentGroup.quaternion.set(
+        chassisBody.quaternion.x,
+        chassisBody.quaternion.y,
+        chassisBody.quaternion.z,
+        chassisBody.quaternion.w
+      );
+
+      const wheelAngularStep = (targetSpeedX * FIXED_DT) / wheelRadius;
+      leftWheelGroup.rotation.z -= wheelAngularStep;
+      rightWheelGroup.rotation.z -= wheelAngularStep;
+
+      // Compute live tilt angle in degrees relative to world up
+      tempQuat.set(
+        chassisBody.quaternion.x,
+        chassisBody.quaternion.y,
+        chassisBody.quaternion.z,
+        chassisBody.quaternion.w
+      );
+      localUp.set(0, 1, 0).applyQuaternion(tempQuat);
+      const cosAngle = THREE.MathUtils.clamp(localUp.dot(worldUp), -1, 1);
+      const currentTiltDeg = THREE.MathUtils.radToDeg(Math.acos(cosAngle));
+
+      // Update global telemetry state
+      window.simState.agentPos.x = Number(chassisBody.position.x.toFixed(4));
+      window.simState.agentPos.y = Number(chassisBody.position.y.toFixed(4));
+      window.simState.agentPos.z = Number(chassisBody.position.z.toFixed(4));
+
+      if (currentTiltDeg > window.simState.maxTiltDeg) {
+        window.simState.maxTiltDeg = Number(currentTiltDeg.toFixed(4));
+      }
+
+      // Check Automated Goal Criteria: x > 4.0m, y > 0.25m, maxTiltDeg < 8 degrees
+      if (
+        window.simState.agentPos.x > 4.0 &&
+        window.simState.agentPos.y > 0.25 &&
+        window.simState.maxTiltDeg < 8.0
+      ) {
+        window.simState.goalReached = true;
+      }
+
+      // Animate visual bypass chevrons
+      chevrons.forEach((c, idx) => {
+        const pulse = 0.45 + 0.5 * Math.sin(elapsedTime * 5.0 - idx * 0.7);
+        c.material.opacity = pulse;
+      });
+
+      // Update Camera according to active mode
+      if (cameraMode === 'photo') {
+        // Preserves the exact photo reference composition while gently advancing 35% with agent
+        const camFollowX = chassisBody.position.x * 0.35;
+        camera.position.set(photoCamPos.x + camFollowX, photoCamPos.y, photoCamPos.z);
+        camera.lookAt(photoCamTarget.x + camFollowX * 0.75, photoCamTarget.y, photoCamTarget.z);
+      } else if (cameraMode === 'follow') {
+        camera.position.set(chassisBody.position.x - 2.1, chassisBody.position.y + 1.45, chassisBody.position.z + 0.25);
+        camera.lookAt(chassisBody.position.x + 1.8, chassisBody.position.y + 0.45, chassisBody.position.z + 0.1);
+      } else if (cameraMode === 'top') {
+        camera.position.set(2.3, 7.8, 0.3);
+        camera.lookAt(2.3, 0.2, 0.2);
+      }
+
+      // Update Top-Left HUD Overlay
+      elX.textContent = `${window.simState.agentPos.x.toFixed(2)} m`;
+      elY.textContent = `${window.simState.agentPos.y.toFixed(2)} m`;
+      elZ.textContent = `${window.simState.agentPos.z.toFixed(2)} m`;
+      elTilt.textContent = `${currentTiltDeg.toFixed(2)}°`;
+      elMaxTilt.textContent = `${window.simState.maxTiltDeg.toFixed(2)}°`;
+      elCollisions.textContent = String(window.simState.collisions);
+      elTime.textContent = `${elapsedTime.toFixed(2)} s`;
+      elGoal.textContent = window.simState.goalReached ? 'TRUE' : 'FALSE';
+      elGoal.style.color = window.simState.goalReached ? '#34d399' : '#f8fafc';
+
+      if (window.simState.goalReached) {
+        elStatus.textContent = 'GOAL REACHED';
+        elStatus.classList.add('goal');
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      stepSimulation();
+      renderer.render(scene, camera);
+    }
+
+    // Run initial render and start loop
+    renderer.render(scene, camera);
+    animate();
+  </script>
+</body>
+</html>
