@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Club Fortress: Penguin Warfare</title>
+  <style>
+    * { box-sizing: border-box; user-select: none; }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #7dd3fc;
+      font-family: 'Arial Rounded MT Bold', 'Comic Sans MS', sans-serif;
+    }
+    #game-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.95);
+      border-radius: 50%;
+      box-shadow: 0 0 8px rgba(0,0,0,0.4);
+    }
+    #crosshair::after {
+      content: '';
+      position: absolute;
+      top: 6px; left: 6px;
+      width: 4px; height: 4px;
+      background: #f59e0b;
+      border-radius: 50%;
+    }
+    .status-panel {
+      position: absolute;
+      bottom: 25px;
+      left: 25px;
+      background: rgba(14, 116, 144, 0.9);
+      border: 4px solid #38bdf8;
+      border-radius: 20px;
+      padding: 16px 24px;
+      color: white;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 230px;
+    }
+    .status-title {
+      font-size: 13px;
+      color: #bae6fd;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .status-val {
+      font-size: 26px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .bar-bg {
+      width: 100%;
+      height: 14px;
+      background: rgba(0,0,0,0.5);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    #hp-bar-fill {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #22c55e, #86efac);
+      transition: width 0.15s ease;
+    }
+    .class-panel {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(14, 116, 144, 0.9);
+      border: 4px solid #38bdf8;
+      border-radius: 18px;
+      padding: 12px 22px;
+      color: white;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+    }
+    .class-name {
+      font-size: 24px;
+      font-weight: 900;
+      color: #facc15;
+    }
+    .roster-bar {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.8);
+      padding: 8px 12px;
+      border-radius: 14px;
+      border: 2px solid rgba(255,255,255,0.25);
+    }
+    .class-pill {
+      font-size: 12px;
+      padding: 5px 9px;
+      border-radius: 8px;
+      background: #334155;
+      color: #cbd5e1;
+      font-weight: bold;
+    }
+    .class-pill.active {
+      background: #f59e0b;
+      color: #0f172a;
+      box-shadow: 0 0 10px #f59e0b;
+    }
+    .controls-hint {
+      position: absolute;
+      bottom: 25px;
+      right: 25px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 2px solid #0284c7;
+      border-radius: 16px;
+      padding: 14px 18px;
+      color: #e0f2fe;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .key-tag {
+      background: #38bdf8;
+      color: #0c4a6e;
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-weight: bold;
+      font-size: 11px;
+    }
+    #compliment-container {
+      position: absolute;
+      top: 28%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .compliment-text {
+      font-size: 40px;
+      font-weight: 900;
+      color: #facc15;
+      text-shadow: 0 4px 12px rgba(0,0,0,0.7), 0 0 24px rgba(250, 204, 21, 0.9);
+      animation: floatUp 1.25s forwards cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    }
+    @keyframes floatUp {
+      0% { opacity: 0; transform: translateY(35px) scale(0.6); }
+      30% { opacity: 1; transform: translateY(-5px) scale(1.15); }
+      70% { opacity: 1; transform: translateY(-20px) scale(1); }
+      100% { opacity: 0; transform: translateY(-55px) scale(0.9); }
+    }
+    #safe-zone-badge {
+      position: absolute;
+      bottom: 165px;
+      left: 25px;
+      background: rgba(56, 189, 248, 0.95);
+      color: #082f49;
+      font-weight: 900;
+      padding: 7px 16px;
+      border-radius: 30px;
+      font-size: 12px;
+      display: none;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <div id="hud">
+    <div id="crosshair"></div>
+
+    <div class="class-panel">
+      <div class="status-title">Current Penguin Class</div>
+      <div id="class-title" class="class-name">Knight</div>
+      <div id="weapon-desc" style="font-size: 13px; color: #e0f2fe; margin-top: 3px;">Colossal Greatsword Cleave</div>
+    </div>
+
+    <div class="roster-bar">
+      <span class="class-pill" id="pill-1">1 Scout</span>
+      <span class="class-pill" id="pill-2">2 Soldier</span>
+      <span class="class-pill" id="pill-3">3 Pyro</span>
+      <span class="class-pill" id="pill-4">4 Demo</span>
+      <span class="class-pill" id="pill-5">5 Heavy</span>
+      <span class="class-pill" id="pill-6">6 Engi</span>
+      <span class="class-pill" id="pill-7">7 The Flasher</span>
+      <span class="class-pill" id="pill-8">8 Sniper</span>
+      <span class="class-pill" id="pill-9">9 Knight</span>
+    </div>
+
+    <div id="safe-zone-badge">🛡️ SAFE IGLOO SANCTUARY</div>
+
+    <div class="status-panel">
+      <div class="status-title">Health</div>
+      <div class="bar-bg"><div id="hp-bar-fill"></div></div>
+      <div class="status-val"><span id="hp-text">200 / 200</span></div>
+      
+      <div class="status-title" style="margin-top: 4px;">Snow Ammo / Charge</div>
+      <div class="status-val" style="color: #38bdf8;"><span id="ammo-text">READY ⚔️</span></div>
+    </div>
+
+    <div class="controls-hint">
+      <div><span class="key-tag">W</span><span class="key-tag">A</span><span class="key-tag">S</span><span class="key-tag">D</span> Move Penguin</div>
+      <div><span class="key-tag">I</span><span class="key-tag">K</span> Pitch Aim (Up / Down)</div>
+      <div><span class="key-tag">J</span><span class="key-tag">L</span> Turn Aim (Left / Right)</div>
+      <div><span class="key-tag">SPACE</span> Shoot / Swing Giant Greatsword</div>
+      <div><span class="key-tag">1 - 9</span> Swap Class</div>
+    </div>
+
+    <div id="compliment-container"></div>
+  </div>
+
+  <canvas id="game-canvas"></canvas>
+
+  <script>
+    // --- COMPLIMENT POOL ---
+    const COMPLIMENTS = [
+      "WADDLE-TASTIC!", "CLEAVE MASTER!", "FLIPPER FRENZY!", "ICE COLD!",
+      "PURE CHILL!", "PUFFLE PRO!", "SLICK SLICER!", "SNOW CHAMPION!",
+      "COLOSSAL HIT!", "IGLOO LEGEND!", "HONORABLE KNIGHT!", "SPECTACULAR!"
+    ];
+
+    // --- CLASS ROSTER DEFINITIONS ---
+    const CLASSES = {
+      1: {
+        name: "Scout Penguin",
+        weapon: "Scattergun",
+        color: 0x22c55e,
+        bellyColor: 0xdcfce7,
+        speed: 18.0,
+        maxHp: 125,
+        maxAmmo: 30,
+        fireDelay: 0.45,
+        type: 'spread',
+        pellets: 5,
+        damage: 24,
+        range: 45,
+        projSpeed: 55
+      },
+      2: {
+        name: "Soldier Penguin",
+        weapon: "Rocket Launcher",
+        color: 0x4d7c0f,
+        bellyColor: 0xecfccb,
+        speed: 11.0,
+        maxHp: 200,
+        maxAmmo: 15,
+        fireDelay: 0.75,
+        type: 'rocket',
+        damage: 90,
+        projSpeed: 42,
+        splash: 8.0
+      },
+      3: {
+        name: "Pyro Penguin",
+        weapon: "Flame Blower",
+        color: 0xef4444,
+        bellyColor: 0xfee2e2,
+        speed: 13.0,
+        maxHp: 175,
+        maxAmmo: 60,
+        fireDelay: 0.1,
+        type: 'flame',
+        damage: 9,
+        projSpeed: 30,
+        range: 24
+      },
+      4: {
+        name: "Demoman Penguin",
+        weapon: "Grenade Lobber",
+        color: 0x854d0e,
+        bellyColor: 0xfef08a,
+        speed: 12.0,
+        maxHp: 175,
+        maxAmmo: 16,
+        fireDelay: 0.65,
+        type: 'grenade',
+        damage: 80,
+        projSpeed: 28,
+        splash: 7.0
+      },
+      5: {
+        name: "Heavy Penguin",
+        weapon: "Minigun",
+        color: 0x0284c7,
+        bellyColor: 0xe0f2fe,
+        speed: 9.0,
+        maxHp: 300,
+        maxAmmo: 120,
+        fireDelay: 0.08,
+        type: 'bullet',
+        damage: 15,
+        projSpeed: 80,
+        spread: 0.06
+      },
+      6: {
+        name: "Engineer Penguin",
+        weapon: "Wrench Shotgun",
+        color: 0xeab308,
+        bellyColor: 0xfef9c3,
+        speed: 12.0,
+        maxHp: 150,
+        maxAmmo: 25,
+        fireDelay: 0.55,
+        type: 'spread',
+        pellets: 6,
+        damage: 20,
+        projSpeed: 60
+      },
+      7: { // RENAMED TO "THE FLASHER", WEARS A BIG TRENCH COAT, NO HEALTH REGEN
+        name: "The Flasher",
+        weapon: "Rapid Syringe Gun",
+        color: 0x334155, 
+        bellyColor: 0xf1f5f9,
+        speed: 13.5,
+        maxHp: 150,
+        maxAmmo: 50,
+        fireDelay: 0.14,
+        type: 'syringe',
+        damage: 16,
+        projSpeed: 65,
+        regenRate: 0 // No regen!
+      },
+      8: {
+        name: "Sniper Penguin",
+        weapon: "Sniper Rifle",
+        color: 0xd97706,
+        bellyColor: 0xffedd5,
+        speed: 11.5,
+        maxHp: 125,
+        maxAmmo: 12,
+        fireDelay: 1.1,
+        type: 'bullet',
+        damage: 145,
+        projSpeed: 160
+      },
+      9: { // KNIGHT: COLOSSAL BROADSWORD & WIDE SWEEP
+        name: "Knight Penguin",
+        weapon: "Colossal Greatsword Cleave",
+        color: 0x64748b,
+        bellyColor: 0x334155,
+        speed: 15.0,
+        maxHp: 200,
+        maxAmmo: 999,
+        fireDelay: 0.5,
+        type: 'melee',
+        damage: 135,
+        range: 15.0 // Widened damage range
+      }
+    };
+
+    // --- SETUP SCENE, CAMERA, RENDERER ---
+    const canvas = document.getElementById('game-canvas');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xb9e6fe);
+    scene.fog = new THREE.FogExp2(0xb9e6fe, 0.008);
+
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // --- LIGHTING ---
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xcce0ff, 0.75);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+    dirLight.position.set(60, 100, 40);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.near = 10;
+    dirLight.shadow.camera.far = 250;
+    dirLight.shadow.camera.left = -90;
+    dirLight.shadow.camera.right = 90;
+    dirLight.shadow.camera.top = 90;
+    dirLight.shadow.camera.bottom = -90;
+    scene.add(dirLight);
+
+    // --- SOUND SYNTHESIS ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSfx(type) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      const t = audioCtx.currentTime;
+
+      if (type === 'sword') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(320, t);
+        osc.frequency.exponentialRampToValueAtTime(80, t + 0.3);
+        gain.gain.setValueAtTime(0.45, t);
+        gain.gain.linearRampToValueAtTime(0.01, t + 0.3);
+        osc.start(t);
+        osc.stop(t + 0.3);
+      } else if (type === 'pew') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(650, t);
+        osc.frequency.exponentialRampToValueAtTime(140, t + 0.12);
+        gain.gain.setValueAtTime(0.2, t);
+        gain.gain.linearRampToValueAtTime(0.01, t + 0.12);
+        osc.start(t);
+        osc.stop(t + 0.12);
+      } else if (type === 'pain') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(450, t);
+        osc.frequency.linearRampToValueAtTime(200, t + 0.2);
+        gain.gain.setValueAtTime(0.35, t);
+        gain.gain.linearRampToValueAtTime(0.01, t + 0.2);
+        osc.start(t);
+        osc.stop(t + 0.2);
+      } else if (type === 'praise') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, t);
+        osc.frequency.setValueAtTime(659.25, t + 0.08);
+        osc.frequency.setValueAtTime(783.99, t + 0.16);
+        gain.gain.setValueAtTime(0.25, t);
+        gain.gain.linearRampToValueAtTime(0.01, t + 0.35);
+        osc.start(t);
+        osc.stop(t + 0.35);
+      }
+    }
+
+    // --- ENVIRONMENT ---
+    const snowGeo = new THREE.PlaneGeometry(300, 300, 40, 40);
+    const snowMat = new THREE.MeshStandardMaterial({ color: 0xecfeff, roughness: 0.9, metalness: 0.05 });
+    const snowPlane = new THREE.Mesh(snowGeo, snowMat);
+    snowPlane.rotation.x = -Math.PI / 2;
+    snowPlane.receiveShadow = true;
+    scene.add(snowPlane);
+
+    function createPineTree(x, z, scale = 1) {
+      const group = new THREE.Group();
+      const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5a3d28 });
+      const leavesMat = new THREE.MeshLambertMaterial({ color: 0x15803d });
+      const snowCoverMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4 * scale, 0.6 * scale, 3 * scale, 6), trunkMat);
+      trunk.position.y = 1.5 * scale;
+      trunk.castShadow = true;
+      group.add(trunk);
+
+      for (let i = 0; i < 3; i++) {
+        const cone = new THREE.Mesh(new THREE.ConeGeometry((2.5 - i * 0.6) * scale, 2.4 * scale, 7), leavesMat);
+        cone.position.y = (2.8 + i * 1.6) * scale;
+        cone.castShadow = true;
+        group.add(cone);
+
+        const cap = new THREE.Mesh(new THREE.ConeGeometry((2.5 - i * 0.6) * 0.6 * scale, 0.7 * scale, 7), snowCoverMat);
+        cap.position.y = (3.7 + i * 1.6) * scale;
+        group.add(cap);
+      }
+      group.position.set(x, 0, z);
+      scene.add(group);
+    }
+
+    for (let i = 0; i < 55; i++) {
+      const r = 26 + Math.random() * 110;
+      const theta = Math.random() * Math.PI * 2;
+      const x = Math.cos(theta) * r;
+      const z = Math.sin(theta) * r;
+      if (Math.hypot(x, z) > 17) createPineTree(x, z, 0.8 + Math.random() * 0.65);
+    }
+
+    // --- ENEMY-PROOF TRANSPARENT SAFE BASE ---
+    const BASE_RADIUS = 14;
+    const baseGroup = new THREE.Group();
+
+    const domeGeo = new THREE.SphereGeometry(BASE_RADIUS, 32, 24, 0, Math.PI * 2, 0, Math.PI * 0.5);
+    const domeMat = new THREE.MeshPhysicalMaterial({
+      color: 0x7dd3fc,
+      transparent: true,
+      opacity: 0.28,
+      roughness: 0.1,
+      transmission: 0.7,
+      thickness: 1.2,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const safeDome = new THREE.Mesh(domeGeo, domeMat);
+    baseGroup.add(safeDome);
+
+    const floorGeo = new THREE.CircleGeometry(BASE_RADIUS, 32);
+    const floorMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+    const safeFloor = new THREE.Mesh(floorGeo, floorMat);
+    safeFloor.rotation.x = -Math.PI / 2;
+    safeFloor.position.y = 0.05;
+    baseGroup.add(safeFloor);
+
+    const rimGeo = new THREE.TorusGeometry(BASE_RADIUS, 0.35, 12, 48);
+    const rimMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7 });
+    const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+    rimMesh.rotation.x = Math.PI / 2;
+    baseGroup.add(rimMesh);
+
+    scene.add(baseGroup);
+
+    // --- ANIMATED PENGUIN 3D MODEL FACTORY ---
+    function buildPenguinModel(classId, isBot = false) {
+      const charClass = CLASSES[classId] || CLASSES[1];
+      const root = new THREE.Group();
+
+      // References stored for dynamic animations
+      const animData = {
+        bodyMesh: null,
+        leftFlipper: null,
+        rightFlipper: null,
+        beakMesh: null,
+        eyes: [],
+        recoilGroup: null,
+        swordGroup: null,
+        slashWave: null,
+        muzzleFlash: null,
+        trenchCoat: null,
+        isPain: false,
+        painTimer: 0,
+        recoilTimer: 0,
+        origColor: isBot ? 0x334155 : charClass.color
+      };
+
+      const recoilGroup = new THREE.Group();
+      root.add(recoilGroup);
+      animData.recoilGroup = recoilGroup;
+
+      const bodyMat = new THREE.MeshStandardMaterial({
+        color: animData.origColor,
+        roughness: 0.5
+      });
+      const bellyMat = new THREE.MeshStandardMaterial({
+        color: isBot ? 0x94a3b8 : charClass.bellyColor,
+        roughness: 0.6
+      });
+      const beakMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4 });
+      const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const pupilMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+
+      // Torso
+      const body = new THREE.Mesh(new THREE.SphereGeometry(1.0, 20, 20), bodyMat);
+      body.scale.set(0.9, 1.25, 0.85);
+      body.position.y = 1.35;
+      body.castShadow = true;
+      recoilGroup.add(body);
+      animData.bodyMesh = body;
+
+      // Belly
+      const belly = new THREE.Mesh(new THREE.SphereGeometry(0.85, 16, 16), bellyMat);
+      belly.scale.set(0.72, 1.05, 0.45);
+      belly.position.set(0, 1.25, 0.55);
+      recoilGroup.add(belly);
+
+      // Beak (with pivot for open/close pain expression)
+      const beakPivot = new THREE.Group();
+      beakPivot.position.set(0, 1.75, 0.95);
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.65, 8), beakMat);
+      beak.rotation.x = Math.PI / 2;
+      beakPivot.add(beak);
+      recoilGroup.add(beakPivot);
+      animData.beakMesh = beakPivot;
+
+      // Eyes (stored for pain animation)
+      for (let side of [-0.28, 0.28]) {
+        const eyeGroup = new THREE.Group();
+        eyeGroup.position.set(side, 2.0, 0.72);
+
+        const eyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 12), eyeWhiteMat.clone());
+        const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 10), pupilMat);
+        pupil.position.set(side * 0.1, 0.02, 0.16);
+        eyeGroup.add(eyeWhite);
+        eyeGroup.add(pupil);
+        recoilGroup.add(eyeGroup);
+        animData.eyes.push(eyeGroup);
+      }
+
+      // Flippers
+      const flipperGeo = new THREE.BoxGeometry(0.18, 1.1, 0.45);
+      const leftFlipper = new THREE.Mesh(flipperGeo, bodyMat);
+      leftFlipper.position.set(0.95, 1.25, 0);
+      leftFlipper.rotation.z = -0.3;
+      recoilGroup.add(leftFlipper);
+      animData.leftFlipper = leftFlipper;
+
+      const rightFlipper = new THREE.Mesh(flipperGeo, bodyMat);
+      rightFlipper.position.set(-0.95, 1.25, 0);
+      rightFlipper.rotation.z = 0.3;
+      recoilGroup.add(rightFlipper);
+      animData.rightFlipper = rightFlipper;
+
+      // Feet
+      for (let side of [-0.42, 0.42]) {
+        const foot = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.16, 0.7), beakMat);
+        foot.position.set(side, 0.08, 0.2);
+        foot.castShadow = true;
+        root.add(foot);
+      }
+
+      // Gun Muzzle Flash Effect (pops up on shooting)
+      const flashMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.35, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffea00, transparent: true, opacity: 0 })
+      );
+      flashMesh.position.set(0.6, 1.3, 1.8);
+      recoilGroup.add(flashMesh);
+      animData.muzzleFlash = flashMesh;
+
+      // --- ACCESSORIES & CLASS SPECIFIC GEAR ---
+      const itemGroup = new THREE.Group();
+      recoilGroup.add(itemGroup);
+
+      if (classId === 1) { // SCOUT
+        const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.8, 0.3, 16), new THREE.MeshLambertMaterial({ color: 0x16a34a }));
+        cap.position.set(0, 2.4, -0.05);
+        const visor = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.08, 0.5), new THREE.MeshLambertMaterial({ color: 0x16a34a }));
+        visor.position.set(0, 2.3, -0.75);
+        itemGroup.add(cap, visor);
+
+        const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.05, 1.8, 8), new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8 }));
+        bat.position.set(0.65, 1.7, -0.5);
+        bat.rotation.x = -0.5;
+        itemGroup.add(bat);
+
+      } else if (classId === 2) { // SOLDIER
+        const helm = new THREE.Mesh(new THREE.SphereGeometry(0.85, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), new THREE.MeshStandardMaterial({ color: 0x3f6212 }));
+        helm.position.set(0, 2.1, 0);
+        itemGroup.add(helm);
+
+        const bazooka = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 2.4, 12), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+        bazooka.rotation.x = Math.PI / 2;
+        bazooka.position.set(0.7, 1.8, 0.4);
+        itemGroup.add(bazooka);
+
+      } else if (classId === 3) { // PYRO
+        const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.4, 10), new THREE.MeshStandardMaterial({ color: 0xf97316 }));
+        tank.position.set(0, 1.4, -0.75);
+        const goggle = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.08, 8, 16), new THREE.MeshStandardMaterial({ color: 0x111827 }));
+        goggle.position.set(0, 2.05, 0.8);
+        itemGroup.add(tank, goggle);
+
+      } else if (classId === 4) { // DEMO
+        const beanie = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.8, 0.4, 14), new THREE.MeshLambertMaterial({ color: 0x450a0a }));
+        beanie.position.set(0, 2.4, 0);
+        const patch = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+        patch.position.set(-0.3, 2.02, 0.85);
+        itemGroup.add(beanie, patch);
+
+      } else if (classId === 5) { // HEAVY
+        const minigun = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.35, 1.9, 12), new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.6 }));
+        minigun.rotation.x = Math.PI / 2;
+        minigun.position.set(0.65, 1.1, 0.7);
+        itemGroup.add(minigun);
+
+      } else if (classId === 6) { // ENGINEER
+        const hardhat = new THREE.Mesh(new THREE.SphereGeometry(0.85, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3 }));
+        hardhat.position.set(0, 2.2, 0);
+        const rim = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.08, 16), new THREE.MeshStandardMaterial({ color: 0xfacc15 }));
+        rim.position.set(0, 2.15, 0);
+        itemGroup.add(hardhat, rim);
+
+      } else if (classId === 7) { 
+        // --- THE FLASHER (WEARS A BIG CLASSIC TRENCH COAT) ---
+        const coatGroup = new THREE.Group();
+        const coatMat = new THREE.MeshStandardMaterial({ color: 0xd4b996, roughness: 0.8 }); // classic trench khaki
+        const collarMat = new THREE.MeshStandardMaterial({ color: 0xb59a78, roughness: 0.8 });
+
+        // Outer trench coat drape around body
+        const coatBody = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.35, 1.7, 16, 1, true), coatMat);
+        coatBody.position.y = 1.05;
+        coatGroup.add(coatBody);
+
+        // Huge flared trench coat collar
+        const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.7, 0.55, 16, 1, true, 0, Math.PI * 1.8), collarMat);
+        collar.position.set(0, 2.05, 0.05);
+        collar.rotation.y = 0.3;
+        coatGroup.add(collar);
+
+        // Belt with buckle
+        const belt = new THREE.Mesh(new THREE.TorusGeometry(1.02, 0.08, 8, 24), new THREE.MeshLambertMaterial({ color: 0x78350f }));
+        belt.rotation.x = Math.PI / 2;
+        belt.position.y = 1.15;
+        const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.22, 0.15), new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.9 }));
+        buckle.position.set(0, 1.15, 1.04);
+        coatGroup.add(belt, buckle);
+
+        // Syringe needle gun
+        const gun = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 1.2, 8), new THREE.MeshStandardMaterial({ color: 0x94a3b8 }));
+        gun.rotation.x = Math.PI / 2;
+        gun.position.set(0.65, 1.2, 0.6);
+        coatGroup.add(gun);
+
+        itemGroup.add(coatGroup);
+        animData.trenchCoat = coatGroup;
+
+      } else if (classId === 8) { // SNIPER
+        const safariHat = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.9, 0.35, 16), new THREE.MeshLambertMaterial({ color: 0x78350f }));
+        safariHat.position.set(0, 2.38, 0);
+        const brim = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.15, 0.06, 16), new THREE.MeshLambertMaterial({ color: 0x78350f }));
+        brim.position.set(0, 2.25, 0);
+        const shades = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.16, 0.15), new THREE.MeshBasicMaterial({ color: 0x09090b }));
+        shades.position.set(0, 2.02, 0.85);
+        itemGroup.add(safariHat, brim, shades);
+
+      } else if (classId === 9) {
+        // --- KNIGHT: HUGE BUSTER BROADSWORD & GREATHELM ---
+        const helm = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.88, 1.25, 14), new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.2 }));
+        helm.position.set(0, 2.15, 0);
+        const visorSlit = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 0.2), new THREE.MeshBasicMaterial({ color: 0x020617 }));
+        visorSlit.position.set(0, 2.05, 0.82);
+        const plume = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 8), new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3 }));
+        plume.position.set(0, 3.0, -0.2);
+        plume.rotation.x = -0.4;
+        itemGroup.add(helm, visorSlit, plume);
+
+        // ENLARGED MASSIVE BROADSWORD SWING RIG
+        const swordPivot = new THREE.Group();
+        swordPivot.name = "swordPivot";
+
+        // Huge broad blade
+        const bladeGeo = new THREE.BoxGeometry(0.6, 4.2, 0.1);
+        const bladeMat = new THREE.MeshStandardMaterial({
+          color: 0xf1f5f9,
+          metalness: 0.95,
+          roughness: 0.15,
+          emissive: 0x38bdf8,
+          emissiveIntensity: 0.45
+        });
+        const blade = new THREE.Mesh(bladeGeo, bladeMat);
+        blade.position.y = 2.4;
+
+        // Rune groove along the blade
+        const fuller = new THREE.Mesh(new THREE.BoxGeometry(0.12, 3.4, 0.12), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+        fuller.position.y = 2.4;
+
+        // Heavy crossguard
+        const guard = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.24, 0.32), new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.8 }));
+        guard.position.y = 0.35;
+
+        // Two-handed hilt
+        const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.0, 8), new THREE.MeshStandardMaterial({ color: 0x451a03 }));
+        hilt.position.y = -0.25;
+
+        // Pommel
+        const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 8), new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.8 }));
+        pommel.position.y = -0.8;
+
+        swordPivot.add(blade, fuller, guard, hilt, pommel);
+        // Default rest position (held ready)
+        swordPivot.position.set(0.85, 1.2, 0.4);
+        swordPivot.rotation.set(0.6, 0.2, -0.3);
+        itemGroup.add(swordPivot);
+        animData.swordGroup = swordPivot;
+
+        // Glowing Slash Arc Visual (shows during swing)
+        const arcGeo = new THREE.RingGeometry(3.5, 6.2, 24, 1, 0, Math.PI * 0.9);
+        const arcMat = new THREE.MeshBasicMaterial({
+          color: 0x38bdf8,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending
+        });
+        const slashWave = new THREE.Mesh(arcGeo, arcMat);
+        slashWave.rotation.x = Math.PI / 2;
+        slashWave.position.set(0, 1.4, 1.5);
+        recoilGroup.add(slashWave);
+        animData.slashWave = slashWave;
+      }
+
+      root.userData.anim = animData;
+      return root;
+    }
+
+    // --- PLAYER SETUP ---
+    let currentClassId = 9; // Knight
+    let playerHp = CLASSES[currentClassId].maxHp;
+    let playerAmmo = CLASSES[currentClassId].maxAmmo;
+    let lastShootTime = 0;
+    let isSwinging = false;
+    let swordSwingProgress = 0;
+
+    const playerPos = new THREE.Vector3(0, 0, 0);
+    let playerYaw = 0;
+    let playerPitch = 0;
+
+    let playerMesh = buildPenguinModel(currentClassId, false);
+    scene.add(playerMesh);
+
+    // KEYBOARD INPUT
+    const keys = {};
+    window.addEventListener('keydown', (e) => {
+      keys[e.key.toLowerCase()] = true;
+      if (e.key >= '1' && e.key <= '9') {
+        switchClass(parseInt(e.key));
+      }
+    });
+    window.addEventListener('keyup', (e) => {
+      keys[e.key.toLowerCase()] = false;
+    });
+
+    function switchClass(id) {
+      if (id === currentClassId) return;
+      currentClassId = id;
+      const c = CLASSES[id];
+
+      scene.remove(playerMesh);
+      playerMesh = buildPenguinModel(currentClassId, false);
+      scene.add(playerMesh);
+
+      playerHp = c.maxHp;
+      playerAmmo = c.maxAmmo;
+      updateHud();
+
+      for (let i = 1; i <= 9; i++) {
+        document.getElementById(`pill-${i}`).classList.remove('active');
+      }
+      document.getElementById(`pill-${id}`).classList.add('active');
+    }
+    document.getElementById(`pill-${currentClassId}`).classList.add('active');
+
+    function updateHud() {
+      const c = CLASSES[currentClassId];
+      document.getElementById('class-title').innerText = c.name;
+      document.getElementById('weapon-desc').innerText = c.weapon;
+      document.getElementById('hp-text').innerText = `${Math.ceil(playerHp)} / ${c.maxHp}`;
+      document.getElementById('hp-bar-fill').style.width = `${Math.max(0, (playerHp / c.maxHp) * 100)}%`;
+
+      if (c.type === 'melee') {
+        document.getElementById('ammo-text').innerText = "READY ⚔️";
+      } else {
+        document.getElementById('ammo-text').innerText = `${playerAmmo} / ${c.maxAmmo}`;
+      }
+    }
+    updateHud();
+
+    function showCompliment() {
+      const msg = COMPLIMENTS[Math.floor(Math.random() * COMPLIMENTS.length)];
+      const el = document.createElement('div');
+      el.className = 'compliment-text';
+      el.innerText = msg;
+      document.getElementById('compliment-container').appendChild(el);
+      setTimeout(() => el.remove(), 1250);
+      playSfx('praise');
+    }
+
+    // --- BULLETS, PARTICLES & DYING ENEMIES ---
+    const projectiles = [];
+    const enemyProjectiles = [];
+    const particles = [];
+    const dyingEnemies = []; // For death topple animation
+
+    function spawnBullet(pos, dir, speed, damage, isRocket = false, isFlame = false) {
+      let geo, mat;
+      if (isRocket) {
+        geo = new THREE.CylinderGeometry(0.2, 0.2, 0.9, 8);
+        mat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xb91c1c });
+      } else if (isFlame) {
+        geo = new THREE.SphereGeometry(0.5, 8, 8);
+        mat = new THREE.MeshBasicMaterial({ color: 0xf97316, transparent: true, opacity: 0.85 });
+      } else {
+        geo = new THREE.SphereGeometry(0.22, 8, 8);
+        mat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7 });
+      }
+
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(pos);
+      if (isRocket) mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      scene.add(mesh);
+
+      projectiles.push({
+        mesh,
+        dir: dir.clone().normalize(),
+        speed,
+        damage,
+        isRocket,
+        isFlame,
+        life: isFlame ? 0.7 : 3.0
+      });
+    }
+
+    function spawnParticleExplosion(pos, color = 0xbae6fd, count = 12) {
+      for (let i = 0; i < count; i++) {
+        const p = new THREE.Mesh(
+          new THREE.SphereGeometry(0.12 + Math.random() * 0.16, 6, 6),
+          new THREE.MeshBasicMaterial({ color: color })
+        );
+        p.position.copy(pos);
+        const vel = new THREE.Vector3(
+          (Math.random() - 0.5) * 14,
+          Math.random() * 9 + 3,
+          (Math.random() - 0.5) * 14
+        );
+        scene.add(p);
+        particles.push({ mesh: p, vel, life: 0.7 });
+      }
+    }
+
+    // --- ENEMY SYSTEM ---
+    const ENEMY_TRAITS = [
+      { name: "Pebble Spitter", color: 0x64748b, fireRate: 1.8, speed: 6.0, dmg: 4, bulletSpd: 22 },
+      { name: "Snowball Lobber", color: 0x38bdf8, fireRate: 2.3, speed: 5.0, dmg: 7, bulletSpd: 18 },
+      { name: "Rapid Squeaker", color: 0xf43f5e, fireRate: 0.95, speed: 7.0, dmg: 3, bulletSpd: 26 },
+      { name: "Wandering Blaster", color: 0xa855f7, fireRate: 1.5, speed: 5.5, dmg: 5, bulletSpd: 24 }
+    ];
+
+    const enemies = [];
+    const MAX_ENEMIES = 14;
+
+    function spawnEnemy() {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = BASE_RADIUS + 12 + Math.random() * 65;
+      const x = Math.cos(angle) * dist;
+      const z = Math.sin(angle) * dist;
+
+      const trait = ENEMY_TRAITS[Math.floor(Math.random() * ENEMY_TRAITS.length)];
+      const randomClass = Math.floor(Math.random() * 8) + 1;
+      const mesh = buildPenguinModel(randomClass, true);
+      mesh.position.set(x, 0, z);
+      scene.add(mesh);
+
+      enemies.push({
+        mesh,
+        trait,
+        hp: 40,
+        shootTimer: Math.random() * 2.0
+      });
+    }
+
+    for (let i = 0; i < MAX_ENEMIES; i++) {
+      spawnEnemy();
+    }
+
+    // --- ATTACK TRIGGER & ANIMATIONS ---
+    function triggerShootingAnimation(animData) {
+      if (!animData) return;
+      animData.recoilTimer = 0.18; // quick snap back
+      if (animData.muzzleFlash) {
+        animData.muzzleFlash.material.opacity = 0.95;
+      }
+      if (animData.rightFlipper) {
+        animData.rightFlipper.rotation.x = -1.1; // lift flipper like aiming gun
+      }
+    }
+
+    function triggerPainAnimation(animData) {
+      if (!animData) return;
+      animData.isPain = true;
+      animData.painTimer = 0.35; // duration of pained expression
+      playSfx('pain');
+
+      // Turn red / distressed
+      if (animData.bodyMesh) animData.bodyMesh.material.color.setHex(0xf87171);
+      // Open beak wide in shock
+      if (animData.beakMesh) animData.beakMesh.rotation.x = 0.35;
+      // Eyes widen / bulge
+      animData.eyes.forEach(e => e.scale.set(1.5, 1.5, 1.5));
+    }
+
+    function resetPainAnimation(animData) {
+      animData.isPain = false;
+      if (animData.bodyMesh) animData.bodyMesh.material.color.setHex(animData.origColor);
+      if (animData.beakMesh) animData.beakMesh.rotation.x = 0;
+      animData.eyes.forEach(e => e.scale.set(1.0, 1.0, 1.0));
+    }
+
+    function performPlayerAttack() {
+      const c = CLASSES[currentClassId];
+      if (c.type !== 'melee' && playerAmmo <= 0) return;
+
+      const aimDir = new THREE.Vector3(
+        -Math.sin(playerYaw) * Math.cos(playerPitch),
+        Math.sin(playerPitch),
+        -Math.cos(playerYaw) * Math.cos(playerPitch)
+      ).normalize();
+
+      const spawnPoint = playerPos.clone().add(new THREE.Vector3(0, 1.4, 0)).addScaledVector(aimDir, 1.1);
+
+      if (c.type === 'melee') {
+        // --- KNIGHT COLOSSAL GREATSWORD SWING ANIMATION ---
+        isSwinging = true;
+        swordSwingProgress = 0;
+        playSfx('sword');
+
+        // Cleave in wide 180-degree frontal arc up to 15 units!
+        enemies.forEach((enemy, index) => {
+          const toEnemy = enemy.mesh.position.clone().sub(playerPos);
+          const dist = toEnemy.length();
+          if (dist <= c.range) {
+            toEnemy.normalize();
+            const dot = aimDir.dot(toEnemy);
+            if (dot > 0.15) { // very wide sweep hitting all nearby foes!
+              damageEnemy(index, c.damage);
+            }
+          }
+        });
+
+      } else {
+        // SHOOTING GUNS WITH FIRING RECOIL ANIMATION
+        triggerShootingAnimation(playerMesh.userData.anim);
+
+        if (c.type === 'spread') {
+          playSfx('pew');
+          playerAmmo--;
+          for (let i = 0; i < c.pellets; i++) {
+            const spreadDir = aimDir.clone().add(new THREE.Vector3(
+              (Math.random() - 0.5) * 0.15,
+              (Math.random() - 0.5) * 0.15,
+              (Math.random() - 0.5) * 0.15
+            )).normalize();
+            spawnBullet(spawnPoint, spreadDir, c.projSpeed, c.damage);
+          }
+        } else if (c.type === 'rocket') {
+          playSfx('pew');
+          playerAmmo--;
+          spawnBullet(spawnPoint, aimDir, c.projSpeed, c.damage, true);
+        } else if (c.type === 'flame') {
+          playSfx('pew');
+          playerAmmo--;
+          const flameDir = aimDir.clone().add(new THREE.Vector3(
+            (Math.random() - 0.5) * 0.22,
+            (Math.random() - 0.5) * 0.22,
+            (Math.random() - 0.5) * 0.22
+          )).normalize();
+          spawnBullet(spawnPoint, flameDir, c.projSpeed, c.damage, false, true);
+        } else {
+          // Bullet / Syringe
+          playSfx('pew');
+          playerAmmo--;
+          const shotDir = aimDir.clone();
+          if (c.spread) {
+            shotDir.add(new THREE.Vector3((Math.random() - 0.5) * c.spread, (Math.random() - 0.5) * c.spread, (Math.random() - 0.5) * c.spread)).normalize();
+          }
+          spawnBullet(spawnPoint, shotDir, c.projSpeed, c.damage);
+        }
+      }
+
+      updateHud();
+    }
+
+    function damageEnemy(index, dmg) {
+      const enemy = enemies[index];
+      if (!enemy) return;
+
+      enemy.hp -= dmg;
+      triggerPainAnimation(enemy.mesh.userData.anim);
+      spawnParticleExplosion(enemy.mesh.position.clone().add(new THREE.Vector3(0, 1.2, 0)), 0x38bdf8, 8);
+
+      if (enemy.hp <= 0) {
+        // ENEMY DEATH SEQUENCE: Fall over backwards before disappearing
+        const dyingMesh = enemy.mesh;
+        enemies.splice(index, 1);
+
+        dyingEnemies.push({
+          mesh: dyingMesh,
+          progress: 0,
+          fallDir: (Math.random() > 0.5 ? 1 : -1) // backwards or side tumble
+        });
+
+        // REWARD & PRAISE
+        const c = CLASSES[currentClassId];
+        playerAmmo = Math.min(c.maxAmmo, playerAmmo + Math.ceil(c.maxAmmo * 0.35) + 3);
+        showCompliment();
+        updateHud();
+
+        setTimeout(spawnEnemy, 1800);
+      }
+    }
+
+    // --- MAIN LOOP ---
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = Math.min(clock.getDelta(), 0.08);
+      const c = CLASSES[currentClassId];
+
+      // 1. KEYBOARD AIMING (I, K, J, L)
+      const turnSpeed = 2.4 * delta;
+      if (keys['j']) playerYaw += turnSpeed;
+      if (keys['l']) playerYaw -= turnSpeed;
+      if (keys['i']) playerPitch = Math.min(Math.PI * 0.28, playerPitch + turnSpeed * 0.8);
+      if (keys['k']) playerPitch = Math.max(-Math.PI * 0.28, playerPitch - turnSpeed * 0.8);
+
+      // 2. KEYBOARD MOVEMENT (W, A, S, D)
+      const moveVec = new THREE.Vector3(0, 0, 0);
+      const forward = new THREE.Vector3(-Math.sin(playerYaw), 0, -Math.cos(playerYaw)).normalize();
+      const right = new THREE.Vector3(Math.cos(playerYaw), 0, -Math.sin(playerYaw)).normalize();
+
+      if (keys['w']) moveVec.add(forward);
+      if (keys['s']) moveVec.sub(forward);
+      if (keys['d']) moveVec.add(right);
+      if (keys['a']) moveVec.sub(right);
+
+      if (moveVec.lengthSq() > 0) {
+        moveVec.normalize();
+        playerPos.addScaledVector(moveVec, c.speed * delta);
+        // Penguin waddle walk cycle
+        playerMesh.rotation.z = Math.sin(clock.getElapsedTime() * 13) * 0.14;
+      } else {
+        playerMesh.rotation.z = 0;
+      }
+
+      // Constrain player
+      const distFromCenter = Math.hypot(playerPos.x, playerPos.z);
+      if (distFromCenter > 135) playerPos.setLength(135);
+
+      const inSafeZone = distFromCenter <= BASE_RADIUS;
+      document.getElementById('safe-zone-badge').style.display = inSafeZone ? 'block' : 'none';
+
+      playerMesh.position.copy(playerPos);
+      playerMesh.rotation.y = playerYaw;
+
+      // 3. SHOOTING INPUT (SPACEBAR)
+      if (keys[' '] && (clock.getElapsedTime() - lastShootTime >= c.fireDelay)) {
+        lastShootTime = clock.getElapsedTime();
+        performPlayerAttack();
+      }
+
+      // 4. ANIMATION UPDATES (Player & Enemies)
+      // Player pain expression decay
+      const pAnim = playerMesh.userData.anim;
+      if (pAnim && pAnim.isPain) {
+        pAnim.painTimer -= delta;
+        if (pAnim.painTimer <= 0) resetPainAnimation(pAnim);
+      }
+
+      // Player shooting recoil decay
+      if (pAnim && pAnim.recoilTimer > 0) {
+        pAnim.recoilTimer -= delta;
+        pAnim.recoilGroup.position.z = -0.3; // kick back
+        if (pAnim.recoilTimer <= 0) {
+          pAnim.recoilGroup.position.z = 0;
+          if (pAnim.muzzleFlash) pAnim.muzzleFlash.material.opacity = 0;
+          if (pAnim.rightFlipper) pAnim.rightFlipper.rotation.x = 0;
+        }
+      }
+
+      // KNIGHT COLOSSAL GREATSWORD SWING ANIMATION
+      if (isSwinging && pAnim && pAnim.swordGroup) {
+        swordSwingProgress += delta * 4.8;
+        const progress = swordSwingProgress;
+
+        // Big sweeping slash: rotates 180 degrees horizontally across front
+        pAnim.swordGroup.rotation.y = -Math.PI * 0.7 + progress * (Math.PI * 1.4);
+        pAnim.swordGroup.rotation.x = 0.2 + Math.sin(progress * Math.PI) * 1.2;
+        pAnim.swordGroup.rotation.z = -0.4 + Math.sin(progress * Math.PI) * 0.8;
+
+        // Blue crescent energy slash wave
+        if (pAnim.slashWave) {
+          pAnim.slashWave.material.opacity = Math.sin(progress * Math.PI) * 0.85;
+          pAnim.slashWave.rotation.z = -progress * 2.5;
+        }
+
+        if (swordSwingProgress >= 1.0) {
+          isSwinging = false;
+          pAnim.swordGroup.rotation.set(0.6, 0.2, -0.3);
+          if (pAnim.slashWave) pAnim.slashWave.material.opacity = 0;
+        }
+      }
+
+      // 5. THIRD-PERSON CAMERA
+      const camOffset = new THREE.Vector3(0, 4.0, 8.4);
+      camOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerYaw);
+      const targetCamPos = playerPos.clone().add(camOffset);
+      camera.position.lerp(targetCamPos, 0.2);
+
+      const lookTarget = playerPos.clone().add(new THREE.Vector3(0, 1.8 + Math.sin(playerPitch) * 4.2, 0))
+        .addScaledVector(forward, 6.0);
+      camera.lookAt(lookTarget);
+
+      // 6. UPDATE PLAYER PROJECTILES
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+        p.mesh.position.addScaledVector(p.dir, p.speed * delta);
+        p.life -= delta;
+
+        let hit = false;
+        for (let eIdx = enemies.length - 1; eIdx >= 0; eIdx--) {
+          const enemy = enemies[eIdx];
+          const dist = p.mesh.position.distanceTo(enemy.mesh.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
+          if (dist < 1.4) {
+            hit = true;
+            damageEnemy(eIdx, p.damage);
+            break;
+          }
+        }
+
+        if (p.life <= 0 || hit || p.mesh.position.y < 0.2) {
+          if (p.isRocket) {
+            enemies.forEach((enemy, eIdx) => {
+              if (p.mesh.position.distanceTo(enemy.mesh.position) <= 8.0) {
+                damageEnemy(eIdx, p.damage * 0.7);
+              }
+            });
+            spawnParticleExplosion(p.mesh.position, 0xf97316, 16);
+          }
+          scene.remove(p.mesh);
+          projectiles.splice(i, 1);
+        }
+      }
+
+      // 7. UPDATE ENEMY BEHAVIOR & ANIMATIONS
+      enemies.forEach((enemy) => {
+        const eAnim = enemy.mesh.userData.anim;
+        const toPlayer = playerPos.clone().sub(enemy.mesh.position);
+        const dist = toPlayer.length();
+
+        // Face player
+        enemy.mesh.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+
+        // Movement
+        if (dist > 14 && dist < 70) {
+          const moveDir = toPlayer.clone().normalize();
+          const targetPos = enemy.mesh.position.clone().addScaledVector(moveDir, enemy.trait.speed * delta);
+          if (targetPos.length() > BASE_RADIUS + 0.5) {
+            enemy.mesh.position.copy(targetPos);
+            enemy.mesh.rotation.z = Math.sin(clock.getElapsedTime() * 11) * 0.12; // enemy waddle
+          }
+        }
+
+        // Decay enemy pain expression
+        if (eAnim && eAnim.isPain) {
+          eAnim.painTimer -= delta;
+          if (eAnim.painTimer <= 0) resetPainAnimation(eAnim);
+        }
+
+        // Decay enemy shooting recoil
+        if (eAnim && eAnim.recoilTimer > 0) {
+          eAnim.recoilTimer -= delta;
+          eAnim.recoilGroup.position.z = -0.25;
+          if (eAnim.recoilTimer <= 0) {
+            eAnim.recoilGroup.position.z = 0;
+            if (eAnim.muzzleFlash) eAnim.muzzleFlash.material.opacity = 0;
+          }
+        }
+
+        // Enemy shooting
+        enemy.shootTimer += delta;
+        if (enemy.shootTimer >= enemy.trait.fireRate) {
+          enemy.shootTimer = 0;
+          if (dist < 60) {
+            triggerShootingAnimation(eAnim);
+
+            const shootOrigin = enemy.mesh.position.clone().add(new THREE.Vector3(0, 1.3, 0));
+            const shootDir = playerPos.clone().add(new THREE.Vector3(0, 1.2, 0)).sub(shootOrigin).normalize();
+
+            const bulletMesh = new THREE.Mesh(
+              new THREE.SphereGeometry(0.22, 6, 6),
+              new THREE.MeshBasicMaterial({ color: enemy.trait.color })
+            );
+            bulletMesh.position.copy(shootOrigin);
+            scene.add(bulletMesh);
+
+            enemyProjectiles.push({
+              mesh: bulletMesh,
+              dir: shootDir,
+              speed: enemy.trait.bulletSpd,
+              damage: enemy.trait.dmg,
+              life: 3.5
+            });
+          }
+        }
+      });
+
+      // 8. UPDATE ENEMY PROJECTILES
+      for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+        const ep = enemyProjectiles[i];
+        ep.mesh.position.addScaledVector(ep.dir, ep.speed * delta);
+        ep.life -= delta;
+
+        if (ep.mesh.position.length() <= BASE_RADIUS) {
+          spawnParticleExplosion(ep.mesh.position, 0x38bdf8, 4);
+          scene.remove(ep.mesh);
+          enemyProjectiles.splice(i, 1);
+          continue;
+        }
+
+        // Hit player
+        const hitDist = ep.mesh.position.distanceTo(playerPos.clone().add(new THREE.Vector3(0, 1.2, 0)));
+        if (!inSafeZone && hitDist < 1.35) {
+          playerHp = Math.max(0, playerHp - ep.damage);
+          triggerPainAnimation(pAnim);
+          updateHud();
+          scene.remove(ep.mesh);
+          enemyProjectiles.splice(i, 1);
+
+          if (playerHp <= 0) {
+            playerHp = c.maxHp;
+            playerAmmo = c.maxAmmo;
+            playerPos.set(0, 0, 0);
+            updateHud();
+          }
+          continue;
+        }
+
+        if (ep.life <= 0 || ep.mesh.position.y < 0.1) {
+          scene.remove(ep.mesh);
+          enemyProjectiles.splice(i, 1);
+        }
+      }
+
+      // 9. UPDATE ENEMY DEATH TOPPLE ANIMATION
+      for (let i = dyingEnemies.length - 1; i >= 0; i--) {
+        const d = dyingEnemies[i];
+        d.progress += delta * 2.2;
+
+        // Falling backward onto the snow
+        d.mesh.rotation.x = -Math.min(Math.PI / 2, d.progress * (Math.PI / 2));
+        d.mesh.rotation.z += d.fallDir * delta * 1.5;
+        d.mesh.position.y = Math.max(0.2, 1.0 - d.progress * 0.9);
+
+        // When flat on ground, spawn snow puff and remove
+        if (d.progress >= 1.0) {
+          spawnParticleExplosion(d.mesh.position.clone().add(new THREE.Vector3(0, 0.4, 0)), 0xffffff, 16);
+          scene.remove(d.mesh);
+          dyingEnemies.splice(i, 1);
+        }
+      }
+
+      // 10. UPDATE PARTICLES
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.vel.y -= 18 * delta;
+        p.mesh.position.addScaledVector(p.vel, delta);
+        p.life -= delta;
+        p.mesh.scale.multiplyScalar(0.95);
+        if (p.life <= 0) {
+          scene.remove(p.mesh);
+          particles.splice(i, 1);
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+  </script>
+</body>
+</html>
