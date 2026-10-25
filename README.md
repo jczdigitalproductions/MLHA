@@ -1,98 +1,106 @@
-# SF Civic Lens + Gemini 4 Argon 
+# Civic Lens Remediation Lab
 
-**SF Civic Lens** is a full-stack urban triage and 3D spatial remediation platform powered by **Gemini 4 Argon (`gemini-4-argon`)** and **FalkorDB**. It upgrades static 2D street-level hazard photos into interactive 3D engineering simulations, physics-verified accessibility bypasses, and graph-tracked municipal dispatch workflows[cite: 5, 6].
+**An Argon-assisted 3D scenario generation and verification workbench for municipal accessibility reviewers.** The focused question: can a synthetic wheelchair traverse a proposed dry bypass around standing water at a curb crossing?
 
-This project includes a static frontend at `sf_civic_lens_web_application.html`, interactive 3D simulation modules, and a Flask backend at `backend_server.py`.
+The core deliverable is executable scene code, traversal evidence, and a reviewable critique-and-repair loop. The original 2D intake, map, graph and dispatch prototype remains available as supporting history, outside the main demo.
 
----
+## Focused scope
 
-## Core Gemini 4 Argon Simulation Capabilities
+- **User:** a municipal accessibility reviewer exploring a temporary curb-access bypass before field assessment.
+- **Input:** a street reference photo (`img-2.png`) and a scenario brief with explicitly synthetic geometry.
+- **Argon work:** generate Three.js/Cannon-es scene code; review a Playwright recording, source and telemetry; propose fixes and retest them.
+- **Output:** an interactive scene, downloadable local traversal evidence, and saved model critiques when a live generation run has completed.
+- **Human decision:** inspect assumptions and evidence; commission field measurements or engineering review. No automatic municipal action.
 
-### 1. Curb Access & Standing Water Bypass Simulation (3D Physics & Telemetry)
-Using **Gemini 4 Argon's** 1M output window and multimodal video reasoning, the system generates and verifies a playable 3D street-intersection simulation for curb-access hazards[cite: 5, 6]:
+See [PROJECT_SCOPE.md](PROJECT_SCOPE.md) for acceptance criteria, exclusions and a judging walkthrough aligned with the supplied builder guide.
 
-* **Spatial Hazard & Remediation Modeling:**
-  * **Observed Standing Water (No-Go Zone):** Maps flooded curb-ramp zones with an assumed standing water depth of `4–8 cm` alongside the tactile warning panel and pedestrian crosswalk signal pole[cite: 6].
-  * **Proposed Temporary Dry Bypass:** Generates a highlighted green dry sidewalk bypass path engineered to a safe `~2.0° (3.5%)` grade around street obstacles (such as municipal trash bins and flooded gutters)[cite: 6].
-  * **Synthetic Verification Goal:** Places an automated verification target zone on the upper sidewalk at `x > 4.0m, y > 0.25m`[cite: 6].
-* **Live Curb Access Telemetry HUD:**
-  * Continuously tracks and renders real-time agent physics metrics in the top-left overlay so both human analysts and the **Gemini 4 Argon Video Critic** can verify safe traversal frame-by-frame[cite: 5, 6]:
-    * **Coordinates:** Real-time `Pos X`, `Pos Y`, and `Pos Z` tracking (confirming traversal from `Pos X: 1.43 m` to `6.43 m` and `Pos Y: 0.36 m`)[cite: 6].
-    * **Incline & Stability:** Live `Slope / Tilt` (`1.51°` to `2.00°`) and peak `Max Tilt` (`2.00°`), ensuring the wheelchair agent never tips[cite: 6].
-    * **Safety & Target Status:** Tracks `Collisions: 0`, `Elapsed` time (`s`), and dynamically flips the status badge from `BYPASS ACTIVE` (`Goal: FALSE`) to `GOAL REACHED` (`Goal: TRUE`) once the wheelchair agent crosses `x > 4.0m, y > 0.25m`[cite: 6].
-* **Multi-Angle Interactive Camera Controls:**
-  * **Photo Reference View:** Perspective aligned with the original street-level inspection photo, showing the standing water, tactile domes, and bypass route[cite: 6].
-  * **Tracking View:** Third-person follow camera behind the wheelchair agent as it ascends the dry sidewalk grade[cite: 6].
-  * **Overhead Plan View:** Top-down orthographic blueprint displaying spatial callouts for the Standing Water No-Go Zone, Proposed Temporary Bypass, and Synthetic Goal[cite: 6].
+## Run the main demo
 
-### 2. 3D Volumetric Road Crack & Pothole Analysis
-For severe pavement failures and potholes, Gemini 4 Argon transforms raw street photos into a 3D topographic wireframe and thermal stress overlay[cite: 3]:
-* **Automated Volumetric & Depth Telemetry:** Estimates structural parameters directly on the 3D mesh, including **Depth** (`14.2 cm`), **Volume** (`0.18 m³`), **Surface Area** (`1.2 m²`), and **Damage Severity** (`HIGH`).
-* **Fracture Propagation Mapping:** Highlights radiating asphalt stress fractures and user reference scale markers to prioritize municipal crew dispatch.
+Use Node.js 22.9 or later:
 
----
+```sh
+npm install
+npm run dev
+```
 
-## Start the backend
+Open the URL printed by Vite. The landing page embeds the Mission scene, provides a **Run traversal check** button, exports evidence JSON, and reads an existing Argon audit if one exists. This local path needs no API key or database. Internet access and WebGL are needed for the scene's CDN imports. A missing saved audit is shown honestly; no successful model review is invented.
 
-From the project folder:
+For Flask hosting instead:
 
-1. Copy `setenv.bat.example` to `setenv.bat`.
-2. Put your private FalkorDB values in the local `setenv.bat`.
-3. Run it in the same Command Prompt session as the backend:
-
-```bat
-call setenv.bat
+```sh
+python -m pip install -r requirements.txt
 python backend_server.py
 ```
 
-`setenv.bat` is ignored by Git. Never commit database credentials or paste them into this README.
+Open http://127.0.0.1:5001/. Both entry points open the remediation workbench. `/civic-lens.html` opens the legacy prototype. FalkorDB configuration is needed only for its graph action features: copy `setenv.bat.example` to a private `setenv.bat`, fill the values, and run `call setenv.bat` in the same Command Prompt before starting Flask. The React development server forwards `/api` to Flask on port 5001.
 
-Then open the HTML file in a browser.
+## Generate, record, critique and revise
 
-The header displays the total number of page visits recorded by the backend. The count is stored locally in the ignored `page_visits.json` file and counts page loads, not unique people.
+Put your private `GEMINI_API_KEY` in `.env`; use `.env.example` as a starting point without overwriting existing credentials. Preview-model access is required.
 
-## What it records
-
-When a user publishes an incident or dispatches a crew, the backend writes a graph relationship like:
-
-- `(:Person)-[:PERFORMED]->(:Incident)`
-- `(:Incident)-[:IN_DISTRICT]->(:District)`
-
-This lets you later query who did what in the graph.
-
-## Example queries
-
-```cypher
-MATCH (p:Person)-[r:PERFORMED]->(i:Incident)
-RETURN p.name, r.action, i.ticketId, r.timestamp
-ORDER BY r.timestamp DESC;
-
-MATCH (p:Person)-[:PERFORMED]->(i:Incident)
-WHERE p.name = 'Analyst'
-RETURN p.name, i.ticketId, i.category, i.location;
+```sh
+npm run simulate -- mission_ramp --iterations 2
 ```
 
-## System Architecture & Track Alignment
+The script configures `gemini-4-argon` through the Interactions API, with `thinking_level` rather than legacy sampling controls. It generates a scene, records an eight-second browser rollout, submits the video/source/telemetry for critique, and retests proposed patches in subsequent iterations. The final untested proposed patch is not applied. Outputs:
 
+- `public/simulations/mission_ramp.html`: generated scene.
+- `public/simulations/mission_ramp_audit.json`: recorded telemetry and model critiques.
+- `artifacts/videos/`: recorded rollouts.
+
+Use **Refresh saved audit** in the workbench after generation. Generation may take longer than three minutes; prepare the scene and audit before judging and show a local traversal live. Model access and successful hosted execution have not been verified by local tests. A saved audit is historical evidence, not proof that the current scene is unchanged.
+
+## Verification boundaries
+
+The browser check observes advancing frames, goal coordinates `x > 4 m` and `y > 0.25 m`, maximum tilt below 8°, zero reported obstacle collisions, and no reported scene errors. It exports the observed state and distinguishes the local check from a model call.
+
+The included scene uses guided motion, including constrained position and orientation. Its slope and water depth are illustrative. A passing local check does **not** establish independent physics correctness, a safe real-world route, measured dimensions, or accessibility compliance.
+
+The pothole page is a separate illustrative mesh with scenario values, not image-derived depth or thermal analysis. The SOMA mattress scene is not included. Open311/PostGIS integration, measured performance improvement, WCAG AAA certification, and a million-token benchmark are outside the current deliverable.
+
+## Run Argon inside Managed Agents (Antigravity)
+
+The optional `managed-agent` command implements section 4 of the hackathon builder guide: it calls the Interactions API with agent `antigravity-preview-09-2026`, agent configuration `{ type: "antigravity", model: "gemini-4-argon" }`, and a remote environment. Antigravity can inspect source, run checks, and make changes inside its Google-hosted Linux workspace.
+
+1. Use Node.js 22.9 or later and install dependencies with `npm install`.
+2. Add `GEMINI_API_KEY` to your existing local `.env`, or copy `.env.example` if you do not have one. Your account needs access to the preview agent and model.
+3. Preview the selected files and task without an API request:
+
+```sh
+npm run managed-agent -- --dry-run
 ```
-┌────────────────────────────────────────────────────────────────────────────┐
-│                   BASELINE: MLH (SF Civic Lens 2D App)                     │
-│   • 3 SF Test Cases: 5th & Folsom Pothole, Mission ADA Ramp, SOMA Mattress │
-│   • Single static photo -> 2D text triage summary                          │
-└───────────────────┬────────────────────────────────────┬───────────────────┘
-                    │                                    │
-                    ▼                                    ▼
-┌───────────────────────────────────────┐  ┌─────────────────────────────────┐
-│ TRACK 1: MILLION TOKEN ENGINEERING    │  │ TRACK 2: MORE DIMENSIONS        │
-│ • Argon (`gemini-4-argon`) ingests    │  │ • Argon generates complete      │
-│   the entire repo AST in 1 pass       │  │   Three.js + Cannon-es 3D       │
-│ • Streams up to 1M tokens of long     │  │   physics simulation of the SF  │
-│   decode (`maxOutputTokens: 1048576`) │  │   intersection in a single pass │
-│ • Upgrades 3 prototype files into a   │  │ • Headless Playwright records   │
-│   35-file strongly-typed Open311 +    │  │   60fps `.webm` rollout of ADA  │
-│   PostGIS + WCAG AAA municipal suite  │  │   wheelchair/vehicle traversal  │
-│ • Automated benchmark harness proves  │  │ • Argon watches the video,      │
-│   improvement over baseline           │  │   critiques physics/slope bugs, │
-│                                       │  │   and patches the 3D scene loop │
-└───────────────────────────────────────┘  └─────────────────────────────────┘
+
+Start a hosted review, or request fixes in the hosted copy:
+
+```sh
+npm run managed-agent
+npm run managed-agent -- --task repair --prompt "Fix the 2D-to-3D navigation and verify the available scenes."
 ```
+
+Review mode asks for findings without source edits. Repair mode asks the agent to record a baseline, fix concrete defects, and repeat relevant checks. Both request frontend tests, a production build, and Python backend tests. These commands make billable API calls. `ARGON_AGENT_MAX_TOKENS` sets the agent's total token cap (default `65536`); it is not a fixed monetary budget.
+
+Only selected root files and code under `src/`, `scripts/`, `tests/`, and `public/` are mounted. Hidden files, `.env`, `setenv.bat`, dependency directories, media, local databases, and generated artifacts are excluded. This is a source-only snapshot; visual checks can report missing image assets. Inspect the dry-run file list before running with your own source. Network access is restricted to the package registries and frontend/browser CDNs listed in `scripts/argon-managed-agent.mjs`. No local database or third-party credentials are sent to the hosted agent. If you later add authenticated external tools, use Google's Credentials API and a narrow network allowlist rather than putting tokens in prompts or environment sources.
+
+Each run saves `run.json` (interaction/environment IDs, status, usage) and `report.md` under `artifacts/managed-agent/run-*`. The report requests findings, exact test outcomes, and a unified diff for changes. Hosted source changes are **not automatically copied into this project**. Review the report and hosted files before applying them. See Google's documentation for downloading files from the hosted environment.
+
+If local polling is interrupted, inspect the saved interaction again without starting another agent:
+
+```sh
+npm run managed-agent -- --resume YOUR_INTERACTION_ID
+```
+
+The runner polls for up to 20 minutes, requests cancellation on timeout, and treats failed, incomplete, cancelled, or action-required runs as unsuccessful. A failed poll or interruption can leave the hosted run active; use the saved ID to check it. Completed API access has not been verified by the local dry run and mocked tests.
+
+References: [Managed Agents quickstart](https://ai.google.dev/gemini-api/docs/managed-agents-quickstart), [Antigravity agent](https://ai.google.dev/gemini-api/docs/antigravity-agent), [Agent environments](https://ai.google.dev/gemini-api/docs/agent-environment).
+
+## Supporting code and checks
+
+```sh
+npm test
+npm run build
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+`npm run migrate` remains an experimental multi-file candidate generator; it stages output for review and is not the main product or a completed migration benchmark.
+
+The legacy HTML copies (`sf_civic_lens_web_application.html` and `public/civic-lens.html`) should stay synchronized. Its graph records include `(:Person)-[:PERFORMED]->(:Incident)` and `(:Incident)-[:IN_DISTRICT]->(:District)`. These record application actions, not proof of real municipal dispatch. Visit counts are local page loads, not unique people. Local credentials and `page_visits.json` are ignored by Git.
