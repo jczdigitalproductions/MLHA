@@ -2,6 +2,7 @@ import json
 import os
 import threading
 from datetime import datetime, timezone
+import hmac
 
 from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
@@ -144,7 +145,7 @@ def health_check():
 
 @app.post("/api/actions")
 def create_action():
-    if not request.is_json:\n        return jsonify({"ok": False, "error": "JSON body required"}), 415\n    payload = request.get_json(silent=True)\n    if not isinstance(payload, dict):\n        return jsonify({"ok": False, "error": "JSON object required"}), 400\n    token = os.getenv("CIVIC_ACTION_API_TOKEN")\n    if not token or not __import__("hmac").compare_digest(request.headers.get("X-Action-Token", ""), token):\n        return jsonify({"ok": False, "error": "Unauthorized"}), 401\n    if any(not isinstance(v, str) or len(v) > 2000 for v in payload.values()):\n        return jsonify({"ok": False, "error": "Invalid field value"}), 400
+    if not request.is_json:\n        return jsonify({"ok": False, "error": "JSON body required"}), 415\n    payload = request.get_json(silent=True)\n    if not isinstance(payload, dict):\n        return jsonify({"ok": False, "error": "JSON object required"}), 400\n    token = os.getenv("CIVIC_ACTION_API_TOKEN")\n    if not token or not hmac.compare_digest(request.headers.get("X-Action-Token", ""), token):\n        return jsonify({"ok": False, "error": "Unauthorized"}), 401\n    if any(not isinstance(v, str) or len(v) > 2000 for v in payload.values()):\n        return jsonify({"ok": False, "error": "Invalid field value"}), 400
 
     try:
         result = record_action(payload)
@@ -155,7 +156,7 @@ def create_action():
 
 @app.get("/api/actions")
 def list_actions():
-    token = os.getenv("CIVIC_ACTION_API_TOKEN")\n    if not token or not __import__("hmac").compare_digest(request.headers.get("X-Action-Token", ""), token):\n        return jsonify({"ok": False, "error": "Unauthorized"}), 401\n    ticket_id = request.args.get("ticketId")
+    token = os.getenv("CIVIC_ACTION_API_TOKEN")\n    if not token or not hmac.compare_digest(request.headers.get("X-Action-Token", ""), token):\n        return jsonify({"ok": False, "error": "Unauthorized"}), 401\n    ticket_id = request.args.get("ticketId")
     try:
         graph = get_graph()
         if ticket_id:
