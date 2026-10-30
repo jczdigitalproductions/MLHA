@@ -7,8 +7,8 @@ from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 from falkordb import FalkorDB
 
-app = Flask(__name__)
-CORS(app)
+app = Flask(__name__)\napp.config["MAX_CONTENT_LENGTH"] = 32 * 1024
+CORS(app, resources={r"/api/*": {"origins": os.getenv("CORS_ALLOWED_ORIGIN", "http://127.0.0.1:5173").split(",")}})
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -126,7 +126,7 @@ def serve_asset(filename):
     if not filename.lower().endswith(safe_exts):
         return jsonify({"ok": False, "error": "File not found."}), 404
 
-    file_path = os.path.join(BASE_DIR, filename)
+    file_path = os.path.realpath(os.path.join(BASE_DIR, filename))\n    if os.path.commonpath([BASE_DIR, file_path]) != BASE_DIR:\n        return jsonify({"ok": False, "error": "File not found."}), 404
     if os.path.exists(file_path) and os.path.isfile(file_path):
         return send_file(file_path)
 
@@ -144,7 +144,7 @@ def health_check():
 
 @app.post("/api/actions")
 def create_action():
-    payload = request.get_json(silent=True) or {}
+    if not request.is_json:\n        return jsonify({"ok": False, "error": "JSON body required"}), 415\n    payload = request.get_json(silent=True)\n    if not isinstance(payload, dict):\n        return jsonify({"ok": False, "error": "JSON object required"}), 400\n    token = os.getenv("CIVIC_ACTION_API_TOKEN")\n    if not token or not __import__("hmac").compare_digest(request.headers.get("X-Action-Token", ""), token):\n        return jsonify({"ok": False, "error": "Unauthorized"}), 401\n    if any(not isinstance(v, str) or len(v) > 2000 for v in payload.values()):\n        return jsonify({"ok": False, "error": "Invalid field value"}), 400
 
     try:
         result = record_action(payload)
@@ -155,7 +155,7 @@ def create_action():
 
 @app.get("/api/actions")
 def list_actions():
-    ticket_id = request.args.get("ticketId")
+    token = os.getenv("CIVIC_ACTION_API_TOKEN")\n    if not token or not __import__("hmac").compare_digest(request.headers.get("X-Action-Token", ""), token):\n        return jsonify({"ok": False, "error": "Unauthorized"}), 401\n    ticket_id = request.args.get("ticketId")
     try:
         graph = get_graph()
         if ticket_id:
@@ -192,4 +192,4 @@ def list_actions():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=BACKEND_PORT, debug=True)
+    app.run(host=os.getenv("FLASK_HOST", "127.0.0.1"), port=BACKEND_PORT, debug=False)
